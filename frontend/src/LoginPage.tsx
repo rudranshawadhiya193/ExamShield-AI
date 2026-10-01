@@ -169,6 +169,56 @@ export default function LoginPage({
           message?: string;
         };
 
+      /*
+       * Demo fallback:
+       * Render can sleep or be temporarily unreachable.
+       * The two documented demo accounts can still open
+       * the correct role-controlled UI so the hackathon
+       * prototype remains usable.
+       *
+       * Real accounts never use this fallback.
+       */
+      const networkUnavailable =
+        !errorObject.response;
+
+      const expectedAccount =
+        username.trim() ===
+          DEMO_ACCOUNTS[selectedRole].username &&
+        password ===
+          DEMO_ACCOUNTS[selectedRole].password;
+
+      if (
+        networkUnavailable &&
+        expectedAccount
+      ) {
+        const demoUser: AuthUser =
+          selectedRole === "ADMIN"
+            ? {
+                id: 1,
+                username: "admin",
+                full_name:
+                  "ExamShield Administrator",
+                role: "ADMIN",
+                is_active: true,
+              }
+            : {
+                id: 2,
+                username: "candidate",
+                full_name:
+                  "Demo Candidate",
+                role: "CANDIDATE",
+                is_active: true,
+              };
+
+        saveSession(
+          `demo-local-${selectedRole.toLowerCase()}`,
+          demoUser
+        );
+
+        onLogin(demoUser);
+        return;
+      }
+
       setError(
         errorObject.response?.data?.detail ||
         errorObject.message ||
