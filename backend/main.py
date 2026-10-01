@@ -1,4 +1,5 @@
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.anomaly import (
     router as anomaly_router,
@@ -34,11 +35,13 @@ from app.api.routes.report import (
 from app.core.database import (
     Base,
     engine,
+    SessionLocal,
 )
 
 from app.core.security import (
     require_admin,
     require_candidate,
+    hash_password,
 )
 
 from app.models.audit_event import (
@@ -73,6 +76,60 @@ app = FastAPI(
     title="ExamShield AI",
     version="1.0.0",
 )
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+def seed_demo_users():
+    db = SessionLocal()
+    try:
+        demo_users = [
+            {
+                "username": "admin",
+                "password": "Admin@123",
+                "role": "ADMIN",
+                "full_name": "ExamShield Administrator",
+            },
+            {
+                "username": "candidate",
+                "password": "Candidate@123",
+                "role": "CANDIDATE",
+                "full_name": "Demo Candidate",
+            },
+        ]
+
+        for item in demo_users:
+            existing = (
+                db.query(User)
+                .filter(User.username == item["username"])
+                .first()
+            )
+            if existing:
+                continue
+
+            db.add(
+                User(
+                    username=item["username"],
+                    password_hash=hash_password(item["password"]),
+                    role=item["role"],
+                    full_name=item["full_name"],
+                    is_active=1,
+                )
+            )
+
+        db.commit()
+    finally:
+        db.close()
+
+
+seed_demo_users()
 
 
 # ---------------------------------------------------------
