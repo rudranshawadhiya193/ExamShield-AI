@@ -340,7 +340,7 @@ export interface ProctoringEvidenceResponse {
 
 /* =======================================================
    POST-EXAM TRUST REPORT
-   =======================================================
+   ======================================================= */
 
 export interface TrustReportResponse {
   status: string;
