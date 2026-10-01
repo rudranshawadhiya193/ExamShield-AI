@@ -13,78 +13,36 @@ import {
   Video,
 } from "lucide-react";
 
+import {
+  getProctoringEvidence,
+  type ProctoringEvent,
+} from "./api";
+
+
 interface ProctoringEvidencePanelProps {
   candidateId: string;
 }
+
 
 type RiskLevel =
   | "LOW"
   | "MEDIUM"
   | "HIGH";
 
-interface ProctoringEvent {
-  id: string;
-  time: string;
-  type: string;
-  severity: RiskLevel;
-  message: string;
-}
-
-const STORAGE_PREFIX =
-  "examshield_proctoring_events_";
-
-function getStorageKey(
-  candidateId: string
-): string {
-  return (
-    STORAGE_PREFIX +
-    candidateId
-  );
-}
-
-function loadEvents(
-  candidateId: string
-): ProctoringEvent[] {
-  try {
-    const raw =
-      localStorage.getItem(
-        getStorageKey(candidateId)
-      );
-
-    if (!raw) {
-      return [];
-    }
-
-    const parsed =
-      JSON.parse(raw);
-
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-
-    return parsed as ProctoringEvent[];
-  } catch {
-    return [];
-  }
-}
 
 function getLatestRisk(
   events: ProctoringEvent[]
 ): RiskLevel {
-  const latestRisk =
-    events.find(
-      (event) =>
-        event.type ===
-        "PROCTORING_RISK"
-    );
-
-  return (
-    latestRisk?.severity ??
-    "LOW"
+  const latestRisk = events.find(
+    (event) =>
+      event.type === "PROCTORING_RISK"
   );
+
+  return latestRisk?.severity ?? "LOW";
 }
 
-function getRiskColor(
+
+function riskColor(
   risk: RiskLevel
 ): string {
   if (risk === "HIGH") {
@@ -98,72 +56,70 @@ function getRiskColor(
   return "#047857";
 }
 
+
 export default function ProctoringEvidencePanel({
   candidateId,
 }: ProctoringEvidencePanelProps) {
   const [events, setEvents] =
-    useState<ProctoringEvent[]>(
-      () =>
-        loadEvents(
-          candidateId
-        )
-    );
+    useState<ProctoringEvent[]>([]);
 
-  const refresh =
-    useCallback(() => {
-      setEvents(
-        loadEvents(
-          candidateId
-        )
-      );
-    }, [candidateId]);
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState<string | null>(null);
+
+
+  const refresh = useCallback(
+    async () => {
+      try {
+        setError(null);
+
+        const response =
+          await getProctoringEvidence(
+            candidateId
+          );
+
+        setEvents(
+          response.events
+        );
+      } catch (requestError) {
+        console.error(requestError);
+
+        setError(
+          "Unable to load server-side camera evidence."
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [candidateId]
+  );
+
 
   useEffect(() => {
-    refresh();
+    void refresh();
 
     const interval =
       setInterval(
-        refresh,
-        1000
+        () => {
+          void refresh();
+        },
+        2000
       );
 
     return () =>
-      clearInterval(
-        interval
-      );
+      clearInterval(interval);
   }, [refresh]);
 
-  useEffect(() => {
-    const handler =
-      (event: StorageEvent) => {
-        if (
-          event.key ===
-          getStorageKey(
-            candidateId
-          )
-        ) {
-          refresh();
-        }
-      };
-
-    window.addEventListener(
-      "storage",
-      handler
-    );
-
-    return () =>
-      window.removeEventListener(
-        "storage",
-        handler
-      );
-  }, [
-    candidateId,
-    refresh,
-  ]);
 
   const latestRisk =
-    getLatestRisk(
-      events
+    getLatestRisk(events);
+
+  const cameraStarted =
+    events.some(
+      (event) =>
+        event.type === "CAMERA_STARTED"
     );
 
   const highCount =
@@ -171,8 +127,7 @@ export default function ProctoringEvidencePanel({
       () =>
         events.filter(
           (event) =>
-            event.severity ===
-            "HIGH"
+            event.severity === "HIGH"
         ).length,
       [events]
     );
@@ -182,18 +137,11 @@ export default function ProctoringEvidencePanel({
       () =>
         events.filter(
           (event) =>
-            event.severity ===
-            "MEDIUM"
+            event.severity === "MEDIUM"
         ).length,
       [events]
     );
 
-  const cameraStarted =
-    events.some(
-      (event) =>
-        event.type ===
-        "CAMERA_STARTED"
-    );
 
   return (
     <section
@@ -206,20 +154,16 @@ export default function ProctoringEvidencePanel({
       <div
         style={{
           display: "flex",
-          justifyContent:
-            "space-between",
-          alignItems:
-            "center",
+          justifyContent: "space-between",
+          alignItems: "center",
           gap: 12,
-          flexWrap:
-            "wrap",
-          marginBottom:
-            16,
+          flexWrap: "wrap",
+          marginBottom: 16,
         }}
       >
         <div>
           <p className="eyebrow">
-            PROCTORING EVIDENCE
+            SERVER-SIDE PROCTORING EVIDENCE
           </p>
 
           <h3
@@ -237,22 +181,38 @@ export default function ProctoringEvidencePanel({
               fontSize: 12,
             }}
           >
-            Browser-side vision signals for
-            authorized human review.
+            Live vision signals persisted by the backend
+            for authorized human review.
           </p>
         </div>
 
         <button
           className="refresh-button"
-          onClick={refresh}
+          onClick={() => void refresh()}
+          disabled={loading}
         >
-          <RefreshCw
-            size={16}
-          />
-
+          <RefreshCw size={16} />
           Refresh
         </button>
       </div>
+
+
+      {error && (
+        <div
+          style={{
+            marginBottom: 12,
+            padding: 12,
+            borderRadius: 10,
+            background: "#fef2f2",
+            border: "1px solid #fecaca",
+            color: "#991b1b",
+            fontSize: 12,
+          }}
+        >
+          {error}
+        </div>
+      )}
+
 
       <div
         style={{
@@ -266,10 +226,8 @@ export default function ProctoringEvidencePanel({
           style={{
             padding: 14,
             borderRadius: 11,
-            background:
-              "#f8fafc",
-            border:
-              "1px solid #e2e8f0",
+            background: "#f8fafc",
+            border: "1px solid #e2e8f0",
           }}
         >
           <div
@@ -293,14 +251,13 @@ export default function ProctoringEvidencePanel({
           </strong>
         </div>
 
+
         <div
           style={{
             padding: 14,
             borderRadius: 11,
-            background:
-              "#f8fafc",
-            border:
-              "1px solid #e2e8f0",
+            background: "#f8fafc",
+            border: "1px solid #e2e8f0",
           }}
         >
           <div
@@ -317,10 +274,9 @@ export default function ProctoringEvidencePanel({
               display: "block",
               marginTop: 4,
               fontSize: 15,
-              color:
-                cameraStarted
-                  ? "#047857"
-                  : "#64748b",
+              color: cameraStarted
+                ? "#047857"
+                : "#64748b",
             }}
           >
             {cameraStarted
@@ -329,14 +285,13 @@ export default function ProctoringEvidencePanel({
           </strong>
         </div>
 
+
         <div
           style={{
             padding: 14,
             borderRadius: 11,
-            background:
-              "#f8fafc",
-            border:
-              "1px solid #e2e8f0",
+            background: "#f8fafc",
+            border: "1px solid #e2e8f0",
           }}
         >
           <div
@@ -353,24 +308,20 @@ export default function ProctoringEvidencePanel({
               display: "block",
               marginTop: 4,
               fontSize: 20,
-              color:
-                getRiskColor(
-                  latestRisk
-                ),
+              color: riskColor(latestRisk),
             }}
           >
             {latestRisk}
           </strong>
         </div>
 
+
         <div
           style={{
             padding: 14,
             borderRadius: 11,
-            background:
-              "#f8fafc",
-            border:
-              "1px solid #e2e8f0",
+            background: "#f8fafc",
+            border: "1px solid #e2e8f0",
           }}
         >
           <div
@@ -390,17 +341,16 @@ export default function ProctoringEvidencePanel({
               color: "#0f172a",
             }}
           >
-            {highCount +
-              mediumCount}
+            {highCount + mediumCount}
           </strong>
         </div>
       </div>
 
+
       <div
         style={{
           display: "grid",
-          gridTemplateColumns:
-            "1fr 1fr",
+          gridTemplateColumns: "1fr 1fr",
           gap: 12,
           marginTop: 14,
         }}
@@ -409,90 +359,65 @@ export default function ProctoringEvidencePanel({
           style={{
             padding: 14,
             borderRadius: 11,
-            background:
-              "#fffbeb",
-            border:
-              "1px solid #fde68a",
+            background: "#fffbeb",
+            border: "1px solid #fde68a",
           }}
         >
           <div
             style={{
-              display:
-                "flex",
-              alignItems:
-                "center",
+              display: "flex",
+              alignItems: "center",
               gap: 8,
-              color:
-                "#92400e",
-              fontWeight:
-                700,
-              fontSize:
-                12,
+              color: "#92400e",
+              fontWeight: 700,
+              fontSize: 12,
             }}
           >
-            <AlertTriangle
-              size={17}
-            />
+            <AlertTriangle size={17} />
             Attention Signals
           </div>
 
           <strong
             style={{
-              display:
-                "block",
-              marginTop:
-                7,
-              fontSize:
-                23,
-              color:
-                "#a16207",
+              display: "block",
+              marginTop: 7,
+              fontSize: 23,
+              color: "#a16207",
             }}
           >
             {mediumCount}
           </strong>
         </div>
 
+
         <div
           style={{
             padding: 14,
             borderRadius: 11,
-            background:
-              "#fef2f2",
-            border:
-              "1px solid #fecaca",
+            background: "#fef2f2",
+            border: "1px solid #fecaca",
           }}
         >
           <div
             style={{
-              display:
-                "flex",
-              alignItems:
-                "center",
+              display: "flex",
+              alignItems: "center",
               gap: 8,
-              color:
-                "#991b1b",
-              fontWeight:
-                700,
-              fontSize:
-                12,
+              color: "#991b1b",
+              fontWeight: 700,
+              fontSize: 12,
             }}
           >
-            <ShieldAlert
-              size={17}
-            />
+            <ShieldAlert size={17} />
             High-Risk Signals
           </div>
 
           <strong
             style={{
-              display:
-                "block",
-              marginTop:
-                7,
-              fontSize:
-                23,
-              color:
-                "#b91c1c",
+              display: "block",
+              marginTop: 7,
+              fontSize: 23,
+              color: "#b91c1c",
             }}
           >
             {highCount}
@@ -500,153 +425,113 @@ export default function ProctoringEvidencePanel({
         </div>
       </div>
 
+
       <div
         style={{
           marginTop: 16,
-          marginBottom: 9,
-          display:
-            "flex",
-          alignItems:
-            "center",
-          gap: 7,
-          fontSize: 12,
-          fontWeight: 700,
-          color:
-            "#334155",
+          padding: 14,
+          borderRadius: 11,
+          background: "#f8fafc",
+          border: "1px solid #e2e8f0",
         }}
       >
-        <Video
-          size={17}
-        />
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            fontWeight: 700,
+            color: "#334155",
+            fontSize: 12,
+            marginBottom: 10,
+          }}
+        >
+          <Video size={17} />
+          Recent Camera Signals
+        </div>
 
-        Recent Camera Signals
-      </div>
-
-      <div
-        style={{
-          display:
-            "grid",
-          gap: 7,
-        }}
-      >
         {events
           .slice(0, 8)
-          .map(
-            (event) => (
-              <div
-                key={
-                  event.id
-                }
+          .map((event) => (
+            <div
+              key={event.id}
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "125px 150px 1fr",
+                gap: 10,
+                alignItems: "center",
+                padding: "8px 0",
+                borderBottom:
+                  "1px solid #e2e8f0",
+                fontSize: 11,
+              }}
+            >
+              <span
                 style={{
-                  display:
-                    "grid",
-                  gridTemplateColumns:
-                    "80px 150px 70px 1fr",
-                  alignItems:
-                    "center",
-                  gap: 9,
-                  padding:
-                    "9px 0",
-                  borderBottom:
-                    "1px solid #e2e8f0",
-                  fontSize: 11,
+                  color: "#64748b",
                 }}
               >
-                <span
-                  style={{
-                    color:
-                      "#64748b",
-                  }}
-                >
-                  {event.time}
-                </span>
+                {event.time
+                  ? new Date(
+                      event.time
+                    ).toLocaleTimeString()
+                  : "—"}
+              </span>
 
-                <strong
-                  style={{
-                    color:
-                      "#334155",
-                  }}
-                >
-                  {event.type}
-                </strong>
+              <strong
+                style={{
+                  color: riskColor(
+                    event.severity
+                  ),
+                }}
+              >
+                {event.type}
+              </strong>
 
-                <strong
-                  style={{
-                    color:
-                      getRiskColor(
-                        event.severity
-                      ),
-                  }}
-                >
-                  {event.severity}
-                </strong>
+              <span
+                style={{
+                  color: "#475569",
+                }}
+              >
+                {event.message}
+              </span>
+            </div>
+          ))}
 
-                <span
-                  style={{
-                    color:
-                      "#475569",
-                  }}
-                >
-                  {event.message}
-                </span>
-              </div>
-            )
-          )}
-
-        {events.length ===
-          0 && (
+        {events.length === 0 && (
           <div
             style={{
-              padding: 15,
-              borderRadius:
-                9,
-              background:
-                "#f8fafc",
-              color:
-                "#64748b",
+              padding: 10,
+              color: "#64748b",
               fontSize: 11,
             }}
           >
-            No camera evidence recorded yet.
-            Run the candidate examination in
-            another tab/session and refresh.
+            {loading
+              ? "Waiting for camera evidence..."
+              : "No camera evidence recorded yet."}
           </div>
         )}
       </div>
 
+
       <div
         style={{
-          marginTop:
-            12,
-          padding:
-            11,
-          borderRadius:
-            9,
-          background:
-            "#f8fafc",
-          border:
-            "1px solid #e2e8f0",
-          fontSize:
-            10,
-          lineHeight:
-            1.5,
-          color:
-            "#64748b",
+          marginTop: 12,
+          display: "flex",
+          gap: 8,
+          alignItems: "flex-start",
+          fontSize: 10,
+          lineHeight: 1.5,
+          color: "#64748b",
         }}
       >
-        <CheckCircle2
-          size={13}
-          style={{
-            verticalAlign:
-              "middle",
-            marginRight: 5,
-          }}
-        />
-
-        Video is processed locally in this MVP.
-        Risk signals are evidence for authorized
-        human review and are not an automatic
-        cheating verdict.
+        <CheckCircle2 size={14} />
+        <span>
+          Camera footage is not stored. The system stores
+          structured computer-vision risk signals only,
+          for authorized human review.
+        </span>
       </div>
     </section>
   );
