@@ -17,11 +17,30 @@ export default function LoginPage({
   onLogin
 }: LoginPageProps) {
 
+  const requestedRole =
+    new URLSearchParams(
+      window.location.search
+    ).get("role");
+
+  const initialUsername =
+    requestedRole === "admin"
+      ? "admin"
+      : requestedRole === "candidate"
+        ? "candidate"
+        : "";
+
+  const initialPassword =
+    requestedRole === "admin"
+      ? "Admin@123"
+      : requestedRole === "candidate"
+        ? "Candidate@123"
+        : "";
+
   const [username, setUsername] =
-    useState("");
+    useState(initialUsername);
 
   const [password, setPassword] =
-    useState("");
+    useState(initialPassword);
 
   const [loading, setLoading] =
     useState(false);
@@ -167,7 +186,11 @@ export default function LoginPage({
 
 
         <div className="login-heading">
-          Secure Examination Portal
+          {requestedRole === "admin"
+            ? "Administrator Control Center"
+            : requestedRole === "candidate"
+              ? "Candidate Examination Portal"
+              : "Secure Examination Portal"}
         </div>
 
         <div className="login-description">
