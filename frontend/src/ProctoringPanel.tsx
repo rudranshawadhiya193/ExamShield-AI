@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
 } from "react";
 
 import {
@@ -247,6 +248,14 @@ export default function ProctoringPanel({
   const startedRef =
     useRef(false);
 
+  const [monitorStatus, setMonitorStatus] =
+    useState<
+      "NOT_STARTED" |
+      "STARTING" |
+      "ACTIVE" |
+      "UNAVAILABLE"
+    >("NOT_STARTED");
+
   const lastEventSignatureRef =
     useRef<string>("");
 
@@ -420,6 +429,7 @@ export default function ProctoringPanel({
 
       startedRef.current =
         true;
+      setMonitorStatus("STARTING");
 
       try {
         if (
@@ -496,6 +506,8 @@ export default function ProctoringPanel({
         landmarkerRef.current =
           landmarker;
 
+        setMonitorStatus("ACTIVE");
+
         addEvent(
           "CAMERA_STARTED",
           "LOW",
@@ -542,6 +554,8 @@ export default function ProctoringPanel({
           message =
             cameraError.message;
         }
+
+        setMonitorStatus("UNAVAILABLE");
 
         addEvent(
           "CAMERA_UNAVAILABLE",
@@ -617,28 +631,113 @@ export default function ProctoringPanel({
     stopMonitoring,
   ]);
 
-  /*
-   * Hidden video:
-   * candidate does not see the proctoring
-   * dashboard, risk scores, face count, or
-   * head-position information.
-   */
   return (
-    <video
-      ref={videoRef}
-      muted
-      playsInline
-      aria-hidden="true"
-      tabIndex={-1}
-      style={{
-        position: "fixed",
-        width: 1,
-        height: 1,
-        opacity: 0,
-        pointerEvents: "none",
-        left: -10,
-        top: -10,
-      }}
-    />
+    <>
+      <div
+        style={{
+          marginBottom: 18,
+          padding: "14px 16px",
+          borderRadius: 12,
+          border: "1px solid #dbe3ec",
+          background: "#ffffff",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 14,
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <div
+            style={{
+              color: "#0f172a",
+              fontSize: 12,
+              fontWeight: 800,
+            }}
+          >
+            AI CAMERA PROCTORING
+          </div>
+
+          <div
+            style={{
+              marginTop: 4,
+              color: "#64748b",
+              fontSize: 11,
+            }}
+          >
+            Camera signals are analyzed locally and
+            sent as structured evidence for authorized
+            administrator review.
+          </div>
+
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: 11,
+              fontWeight: 800,
+              color:
+                monitorStatus === "ACTIVE"
+                  ? "#047857"
+                  : monitorStatus === "UNAVAILABLE"
+                    ? "#b91c1c"
+                    : "#a16207",
+            }}
+          >
+            Status: {monitorStatus.replace("_", " ")}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => void startMonitoring()}
+          disabled={
+            monitorStatus === "STARTING" ||
+            monitorStatus === "ACTIVE"
+          }
+          style={{
+            padding: "10px 14px",
+            borderRadius: 10,
+            border: "1px solid #93c5fd",
+            background:
+              monitorStatus === "ACTIVE"
+                ? "#dcfce7"
+                : "#eff6ff",
+            color:
+              monitorStatus === "ACTIVE"
+                ? "#166534"
+                : "#1d4ed8",
+            fontSize: 11,
+            fontWeight: 800,
+            cursor:
+              monitorStatus === "ACTIVE"
+                ? "default"
+                : "pointer",
+          }}
+        >
+          {monitorStatus === "ACTIVE"
+            ? "CAMERA MONITORING ACTIVE"
+            : monitorStatus === "STARTING"
+              ? "STARTING CAMERA..."
+              : "START AI CAMERA MONITORING"}
+        </button>
+      </div>
+
+      <video
+        ref={videoRef}
+        muted
+        playsInline
+        aria-hidden="true"
+        tabIndex={-1}
+        style={{
+          position: "fixed",
+          width: 1,
+          height: 1,
+          opacity: 0,
+          pointerEvents: "none",
+          left: -10,
+          top: -10,
+        }}
+      />
+    </>
   );
 }
