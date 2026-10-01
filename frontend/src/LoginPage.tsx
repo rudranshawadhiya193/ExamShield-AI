@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
-import axios from "axios";
+import api from "./api";
 
 import type { AuthUser } from "./auth";
 import { saveSession } from "./auth";
@@ -55,8 +55,8 @@ export default function LoginPage({
       setLoading(true);
 
       const loginResponse =
-        await axios.post(
-          "/backend/auth/login",
+        await api.post(
+          "/auth/login",
           {
             username: username.trim(),
             password
@@ -73,8 +73,8 @@ export default function LoginPage({
       }
 
       const meResponse =
-        await axios.get(
-          "/backend/auth/me",
+        await api.get(
+          "/auth/me",
           {
             headers: {
               Authorization:
@@ -104,20 +104,8 @@ export default function LoginPage({
 
     } catch (requestError) {
 
-      if (
-        axios.isAxiosError(
-          requestError
-        )
-      ) {
-        const detail =
-          requestError.response
-            ?.data
-            ?.detail;
-
-        setError(
-          detail ||
-          "Login failed. Please check the backend server."
-        );
+      if (requestError instanceof Error) {
+        setError(requestError.message || "Login failed. Please check the backend server.");
 
       } else {
 
