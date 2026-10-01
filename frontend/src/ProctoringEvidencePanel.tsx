@@ -8,6 +8,7 @@ import {
 import {
   AlertTriangle,
   CheckCircle2,
+  Clock3,
   RefreshCw,
   ShieldAlert,
   Video,
@@ -18,29 +19,33 @@ import {
   type ProctoringEvent,
 } from "./api";
 
-
 interface ProctoringEvidencePanelProps {
   candidateId: string;
 }
-
 
 type RiskLevel =
   | "LOW"
   | "MEDIUM"
   | "HIGH";
 
-
 function getLatestRisk(
   events: ProctoringEvent[]
 ): RiskLevel {
-  const latestRisk = events.find(
-    (event) =>
-      event.type === "PROCTORING_RISK"
-  );
+  const event =
+    events.find(
+      (item) =>
+        item.type ===
+        "PROCTORING_RISK"
+    );
 
-  return latestRisk?.severity ?? "LOW";
+  return event?.severity ?? "LOW";
 }
 
+function getLatestEvent(
+  events: ProctoringEvent[]
+): ProctoringEvent | null {
+  return events[0] ?? null;
+}
 
 function riskColor(
   risk: RiskLevel
@@ -56,6 +61,15 @@ function riskColor(
   return "#047857";
 }
 
+function formatTime(
+  value: string | null
+): string {
+  if (!value) {
+    return "Not available";
+  }
+
+  return new Date(value).toLocaleTimeString();
+}
 
 export default function ProctoringEvidencePanel({
   candidateId,
@@ -69,6 +83,8 @@ export default function ProctoringEvidencePanel({
   const [error, setError] =
     useState<string | null>(null);
 
+  const [lastRefresh, setLastRefresh] =
+    useState<string>("");
 
   const refresh = useCallback(
     async () => {
@@ -81,7 +97,11 @@ export default function ProctoringEvidencePanel({
           );
 
         setEvents(
-          response.events
+          response.events ?? []
+        );
+
+        setLastRefresh(
+          new Date().toLocaleTimeString()
         );
       } catch (requestError) {
         console.error(requestError);
@@ -96,52 +116,104 @@ export default function ProctoringEvidencePanel({
     [candidateId]
   );
 
-
   useEffect(() => {
     void refresh();
 
     const interval =
-      setInterval(
-        () => {
-          void refresh();
-        },
-        2000
-      );
+      setInterval(() => {
+        void refresh();
+      }, 2000);
 
     return () =>
       clearInterval(interval);
   }, [refresh]);
 
+  const latestEvent =
+    getLatestEvent(events);
 
   const latestRisk =
     getLatestRisk(events);
 
-  const cameraStarted =
-    events.some(
-      (event) =>
-        event.type === "CAMERA_STARTED"
+  const riskEvents =
+    useMemo(
+      () =>
+        events.filter(
+          (event) =>
+            event.type ===
+            "PROCTORING_RISK"
+        ),
+      [events]
     );
 
   const highCount =
     useMemo(
       () =>
-        events.filter(
+        riskEvents.filter(
           (event) =>
-            event.severity === "HIGH"
+            event.severity ===
+            "HIGH"
         ).length,
-      [events]
+      [riskEvents]
     );
 
   const mediumCount =
     useMemo(
       () =>
-        events.filter(
+        riskEvents.filter(
           (event) =>
-            event.severity === "MEDIUM"
+            event.severity ===
+            "MEDIUM"
         ).length,
+      [riskEvents]
+    );
+
+  const statusEvent =
+    useMemo(
+      () =>
+        events.find(
+          (event) =>
+            event.type ===
+            "PROCTORING_STATUS"
+        ),
       [events]
     );
 
+  const lifecycleEvent =
+    useMemo(
+      () =>
+        events.find(
+          (event) =>
+            event.type ===
+              "CAMERA_STARTED" ||
+            event.type ===
+              "CAMERA_UNAVAILABLE"
+        ),
+      [events]
+    );
+
+  const cameraState =
+    lifecycleEvent?.type ===
+    "CAMERA_STARTED"
+      ? "ACTIVE"
+      : lifecycleEvent?.type ===
+          "CAMERA_UNAVAILABLE"
+        ? "UNAVAILABLE"
+        : "NOT STARTED";
+
+  const lastSignalAgeMs =
+    latestEvent?.time
+      ? Math.max(
+          0,
+          Date.now() -
+            new Date(
+              latestEvent.time
+            ).getTime()
+        )
+      : Number.POSITIVE_INFINITY;
+
+  const signalIsLive =
+    cameraState === "ACTIVE" &&
+    lastSignalAgeMs < 10000;
 
   return (
     <section
@@ -154,24 +226,25 @@ export default function ProctoringEvidencePanel({
       <div
         style={{
           display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
+          justifyContent:
+            "space-between",
+          alignItems: "flex-start",
           gap: 12,
           flexWrap: "wrap",
-          marginBottom: 16,
+          marginBottom: 18,
         }}
       >
         <div>
           <p className="eyebrow">
-            SERVER-SIDE PROCTORING EVIDENCE
+            LIVE SERVER-SIDE AI PROCTORING
           </p>
 
           <h3
             style={{
-              marginBottom: 4,
+              marginBottom: 5,
             }}
           >
-            AI Camera Proctoring Review
+            Candidate Camera Monitor
           </h3>
 
           <p
@@ -179,23 +252,28 @@ export default function ProctoringEvidencePanel({
               margin: 0,
               color: "#64748b",
               fontSize: 12,
+              lineHeight: 1.6,
             }}
           >
-            Live vision signals persisted by the backend
-            for authorized human review.
+            Browser-side computer vision sends
+            structured signals to the backend.
+            The administrator sees the latest
+            camera state, face-count signal,
+            head orientation, and review flags.
           </p>
         </div>
 
         <button
           className="refresh-button"
-          onClick={() => void refresh()}
+          onClick={() =>
+            void refresh()
+          }
           disabled={loading}
         >
           <RefreshCw size={16} />
           Refresh
         </button>
       </div>
-
 
       {error && (
         <div
@@ -204,7 +282,8 @@ export default function ProctoringEvidencePanel({
             padding: 12,
             borderRadius: 10,
             background: "#fef2f2",
-            border: "1px solid #fecaca",
+            border:
+              "1px solid #fecaca",
             color: "#991b1b",
             fontSize: 12,
           }}
@@ -213,307 +292,501 @@ export default function ProctoringEvidencePanel({
         </div>
       )}
 
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns:
+            "repeat(5, minmax(0, 1fr))",
+          gap: 10,
+        }}
+      >
+        {[
+          {
+            label: "Candidate",
+            value: candidateId,
+            color: "#0f172a",
+          },
+          {
+            label: "Camera",
+            value: signalIsLive
+              ? "ACTIVE"
+              : cameraState,
+            color: signalIsLive
+              ? "#047857"
+              : cameraState ===
+                  "UNAVAILABLE"
+                ? "#b91c1c"
+                : "#a16207",
+          },
+          {
+            label: "Latest Risk",
+            value: latestRisk,
+            color: riskColor(
+              latestRisk
+            ),
+          },
+          {
+            label: "High Flags",
+            value: String(
+              highCount
+            ),
+            color: "#b91c1c",
+          },
+          {
+            label: "Medium Flags",
+            value: String(
+              mediumCount
+            ),
+            color: "#a16207",
+          },
+        ].map((item) => (
+          <div
+            key={item.label}
+            style={{
+              padding: 14,
+              borderRadius: 11,
+              background:
+                "#f8fafc",
+              border:
+                "1px solid #e2e8f0",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 10,
+                color: "#64748b",
+              }}
+            >
+              {item.label}
+            </div>
+
+            <strong
+              style={{
+                display: "block",
+                marginTop: 4,
+                fontSize:
+                  item.label ===
+                  "Candidate"
+                    ? 13
+                    : 19,
+                color: item.color,
+              }}
+            >
+              {item.value}
+            </strong>
+          </div>
+        ))}
+      </div>
 
       <div
         style={{
           display: "grid",
           gridTemplateColumns:
-            "repeat(4, minmax(0, 1fr))",
+            "repeat(3, minmax(0, 1fr))",
           gap: 10,
+          marginTop: 12,
         }}
       >
         <div
           style={{
-            padding: 14,
-            borderRadius: 11,
-            background: "#f8fafc",
-            border: "1px solid #e2e8f0",
+            padding: 13,
+            borderRadius: 10,
+            background:
+              "#ffffff",
+            border:
+              "1px solid #e2e8f0",
           }}
         >
           <div
             style={{
-              fontSize: 10,
-              color: "#64748b",
+              display: "flex",
+              gap: 7,
+              alignItems:
+                "center",
+              color: "#475569",
+              fontSize: 11,
+              fontWeight: 700,
             }}
           >
-            Candidate
+            <Video size={14} />
+            Camera State
           </div>
 
           <strong
             style={{
               display: "block",
-              marginTop: 4,
+              marginTop: 8,
+              color:
+                signalIsLive
+                  ? "#047857"
+                  : "#64748b",
               fontSize: 15,
-              color: "#0f172a",
             }}
           >
-            {candidateId}
+            {signalIsLive
+              ? "LIVE SIGNALS"
+              : cameraState}
           </strong>
         </div>
 
-
         <div
           style={{
-            padding: 14,
-            borderRadius: 11,
-            background: "#f8fafc",
-            border: "1px solid #e2e8f0",
+            padding: 13,
+            borderRadius: 10,
+            background:
+              "#ffffff",
+            border:
+              "1px solid #e2e8f0",
           }}
         >
           <div
             style={{
-              fontSize: 10,
-              color: "#64748b",
+              display: "flex",
+              gap: 7,
+              alignItems:
+                "center",
+              color: "#475569",
+              fontSize: 11,
+              fontWeight: 700,
             }}
           >
-            Camera
+            <ShieldAlert size={14} />
+            Latest Detection
           </div>
 
           <strong
             style={{
               display: "block",
-              marginTop: 4,
-              fontSize: 15,
-              color: cameraStarted
-                ? "#047857"
-                : "#64748b",
+              marginTop: 8,
+              color:
+                latestEvent
+                  ? "#0f172a"
+                  : "#64748b",
+              fontSize: 13,
+              lineHeight: 1.5,
             }}
           >
-            {cameraStarted
-              ? "ACTIVE"
-              : "NOT STARTED"}
+            {latestEvent?.message ??
+              "No camera signal recorded yet."}
           </strong>
         </div>
 
-
         <div
           style={{
-            padding: 14,
-            borderRadius: 11,
-            background: "#f8fafc",
-            border: "1px solid #e2e8f0",
+            padding: 13,
+            borderRadius: 10,
+            background:
+              "#ffffff",
+            border:
+              "1px solid #e2e8f0",
           }}
         >
           <div
             style={{
-              fontSize: 10,
-              color: "#64748b",
+              display: "flex",
+              gap: 7,
+              alignItems:
+                "center",
+              color: "#475569",
+              fontSize: 11,
+              fontWeight: 700,
             }}
           >
-            Latest Risk
+            <Clock3 size={14} />
+            Signal Freshness
           </div>
 
           <strong
             style={{
               display: "block",
-              marginTop: 4,
-              fontSize: 20,
-              color: riskColor(latestRisk),
+              marginTop: 8,
+              color:
+                signalIsLive
+                  ? "#047857"
+                  : "#64748b",
+              fontSize: 13,
             }}
           >
-            {latestRisk}
+            {latestEvent
+              ? `Last event ${formatTime(
+                  latestEvent.time
+                )}`
+              : "Waiting for first event"}
           </strong>
-        </div>
 
-
-        <div
-          style={{
-            padding: 14,
-            borderRadius: 11,
-            background: "#f8fafc",
-            border: "1px solid #e2e8f0",
-          }}
-        >
-          <div
+          <span
             style={{
+              display: "block",
+              marginTop: 4,
               fontSize: 10,
               color: "#64748b",
             }}
           >
-            Review Signals
-          </div>
-
-          <strong
-            style={{
-              display: "block",
-              marginTop: 4,
-              fontSize: 15,
-              color: "#0f172a",
-            }}
-          >
-            {highCount + mediumCount}
-          </strong>
+            Refreshed: {lastRefresh || "—"}
+          </span>
         </div>
       </div>
 
+      {statusEvent && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: 13,
+            borderRadius: 10,
+            background:
+              "#f8fafc",
+            border:
+              "1px solid #e2e8f0",
+            color: "#334155",
+            fontSize: 12,
+            lineHeight: 1.6,
+          }}
+        >
+          <strong>
+            Latest live camera status:{" "}
+          </strong>
+          {statusEvent.message}
+        </div>
+      )}
 
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 12,
-          marginTop: 14,
+          marginTop: 18,
+          padding: 14,
+          borderRadius: 11,
+          background:
+            latestRisk === "HIGH"
+              ? "#fef2f2"
+              : latestRisk === "MEDIUM"
+                ? "#fffbeb"
+                : "#f0fdf4",
+          border:
+            latestRisk === "HIGH"
+              ? "1px solid #fecaca"
+              : latestRisk === "MEDIUM"
+                ? "1px solid #fde68a"
+                : "1px solid #bbf7d0",
+          display: "flex",
+          gap: 10,
+          alignItems:
+            "flex-start",
         }}
       >
-        <div
-          style={{
-            padding: 14,
-            borderRadius: 11,
-            background: "#fffbeb",
-            border: "1px solid #fde68a",
-          }}
-        >
-          <div
+        {latestRisk === "LOW" ? (
+          <CheckCircle2
+            size={18}
+            color="#047857"
+          />
+        ) : (
+          <AlertTriangle
+            size={18}
+            color={riskColor(
+              latestRisk
+            )}
+          />
+        )}
+
+        <div>
+          <strong
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              color: "#92400e",
-              fontWeight: 700,
+              color:
+                riskColor(
+                  latestRisk
+                ),
               fontSize: 12,
             }}
           >
-            <AlertTriangle size={17} />
-            Attention Signals
-          </div>
-
-          <strong
-            style={{
-              display: "block",
-              marginTop: 7,
-              fontSize: 23,
-              color: "#a16207",
-            }}
-          >
-            {mediumCount}
+            {latestRisk ===
+            "HIGH"
+              ? "High-severity camera signal"
+              : latestRisk ===
+                  "MEDIUM"
+                ? "Medium-severity camera signal"
+                : "Camera monitoring active"}
           </strong>
-        </div>
 
-
-        <div
-          style={{
-            padding: 14,
-            borderRadius: 11,
-            background: "#fef2f2",
-            border: "1px solid #fecaca",
-          }}
-        >
           <div
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              color: "#991b1b",
-              fontWeight: 700,
-              fontSize: 12,
+              marginTop: 4,
+              color: "#475569",
+              fontSize: 11,
+              lineHeight: 1.5,
             }}
           >
-            <ShieldAlert size={17} />
-            High-Risk Signals
+            AI signals support authorized
+            human review; they are not an
+            automatic cheating verdict.
           </div>
-
-          <strong
-            style={{
-              display: "block",
-              marginTop: 7,
-              fontSize: 23,
-              color: "#b91c1c",
-            }}
-          >
-            {highCount}
-          </strong>
         </div>
       </div>
-
 
       <div
         style={{
           marginTop: 16,
-          padding: 14,
-          borderRadius: 11,
-          background: "#f8fafc",
-          border: "1px solid #e2e8f0",
+          overflowX: "auto",
         }}
       >
-        <div
+        <table
           style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            fontWeight: 700,
-            color: "#334155",
-            fontSize: 12,
-            marginBottom: 10,
+            width: "100%",
+            minWidth: 760,
+            borderCollapse:
+              "collapse",
           }}
         >
-          <Video size={17} />
-          Recent Camera Signals
-        </div>
-
-        {events
-          .slice(0, 8)
-          .map((event) => (
-            <div
-              key={event.id}
-              style={{
-                display: "grid",
-                gridTemplateColumns:
-                  "125px 150px 1fr",
-                gap: 10,
-                alignItems: "center",
-                padding: "8px 0",
-                borderBottom:
-                  "1px solid #e2e8f0",
-                fontSize: 11,
-              }}
-            >
-              <span
+          <thead>
+            <tr>
+              <th
                 style={{
+                  textAlign: "left",
+                  padding:
+                    "9px 8px",
+                  fontSize: 10,
                   color: "#64748b",
                 }}
               >
-                {event.time
-                  ? new Date(
+                Time
+              </th>
+
+              <th
+                style={{
+                  textAlign: "left",
+                  padding:
+                    "9px 8px",
+                  fontSize: 10,
+                  color: "#64748b",
+                }}
+              >
+                Event
+              </th>
+
+              <th
+                style={{
+                  textAlign: "left",
+                  padding:
+                    "9px 8px",
+                  fontSize: 10,
+                  color: "#64748b",
+                }}
+              >
+                Severity
+              </th>
+
+              <th
+                style={{
+                  textAlign: "left",
+                  padding:
+                    "9px 8px",
+                  fontSize: 10,
+                  color: "#64748b",
+                }}
+              >
+                Detection Evidence
+              </th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {events
+              .slice(0, 10)
+              .map((event) => (
+                <tr key={event.id}>
+                  <td
+                    style={{
+                      padding:
+                        "10px 8px",
+                      borderTop:
+                        "1px solid #e2e8f0",
+                      color:
+                        "#64748b",
+                      fontSize: 11,
+                      whiteSpace:
+                        "nowrap",
+                    }}
+                  >
+                    {formatTime(
                       event.time
-                    ).toLocaleTimeString()
-                  : "—"}
-              </span>
+                    )}
+                  </td>
 
-              <strong
-                style={{
-                  color: riskColor(
-                    event.severity
-                  ),
-                }}
-              >
-                {event.type}
-              </strong>
+                  <td
+                    style={{
+                      padding:
+                        "10px 8px",
+                      borderTop:
+                        "1px solid #e2e8f0",
+                      color:
+                        "#0f172a",
+                      fontSize: 11,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {event.type}
+                  </td>
 
-              <span
+                  <td
+                    style={{
+                      padding:
+                        "10px 8px",
+                      borderTop:
+                        "1px solid #e2e8f0",
+                      color:
+                        riskColor(
+                          event.severity
+                        ),
+                      fontSize: 11,
+                      fontWeight: 800,
+                    }}
+                  >
+                    {event.severity}
+                  </td>
+
+                  <td
+                    style={{
+                      padding:
+                        "10px 8px",
+                      borderTop:
+                        "1px solid #e2e8f0",
+                      color:
+                        "#475569",
+                      fontSize: 11,
+                    }}
+                  >
+                    {event.message}
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+
+        {!loading &&
+          events.length === 0 && (
+            <div
+              style={{
+                marginTop: 10,
+                padding: 14,
+                borderRadius: 9,
+                background:
+                  "#f8fafc",
+                color: "#64748b",
+                fontSize: 11,
+              }}
+            >
+              <AlertTriangle
+                size={15}
                 style={{
-                  color: "#475569",
+                  verticalAlign:
+                    "middle",
+                  marginRight: 6,
                 }}
-              >
-                {event.message}
-              </span>
+              />
+              No camera evidence has reached
+              the server yet. Open the Candidate
+              role in another tab/browser and
+              allow camera access.
             </div>
-          ))}
-
-        {events.length === 0 && (
-          <div
-            style={{
-              padding: 10,
-              color: "#64748b",
-              fontSize: 11,
-            }}
-          >
-            {loading
-              ? "Waiting for camera evidence..."
-              : "No camera evidence recorded yet."}
-          </div>
-        )}
+          )}
       </div>
-
 
       <div
         style={{
@@ -521,16 +794,18 @@ export default function ProctoringEvidencePanel({
           display: "flex",
           gap: 8,
           alignItems: "flex-start",
-          fontSize: 10,
-          lineHeight: 1.5,
           color: "#64748b",
+          fontSize: 10,
+          lineHeight: 1.55,
         }}
       >
-        <CheckCircle2 size={14} />
+        <ShieldAlert size={14} />
+
         <span>
-          Camera footage is not stored. The system stores
-          structured computer-vision risk signals only,
-          for authorized human review.
+          Camera footage is not stored or
+          uploaded by this MVP. Only structured
+          computer-vision detection signals are
+          persisted for authorized review.
         </span>
       </div>
     </section>
