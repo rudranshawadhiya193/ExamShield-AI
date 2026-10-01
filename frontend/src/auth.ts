@@ -49,6 +49,16 @@ export function getAccessToken(): string | null {
   );
 }
 
+export function isLocalDemoSession(): boolean {
+  const token =
+    getAccessToken();
+
+  return Boolean(
+    token &&
+    token.startsWith("demo-local-")
+  );
+}
+
 export function getStoredUser(): AuthUser | null {
   const rawUser =
     sessionStorage.getItem(
