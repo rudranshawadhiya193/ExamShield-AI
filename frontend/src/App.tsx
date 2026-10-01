@@ -65,6 +65,7 @@ import FairnessPanel from "./FairnessPanel";
 import AuditPanel from "./AuditPanel";
 import TrustReportPanel from "./TrustReportPanel";
 import PredictionPanel from "./PredictionPanel";
+import ProctoringEvidencePanel from "./ProctoringEvidencePanel";
 
 
 const questions = [
@@ -626,7 +627,9 @@ function OperationsDashboard() {
       <AIReviewPanel
         candidateId="CANDIDATE-001"
       />
-
+<ProctoringEvidencePanel
+  candidateId="CANDIDATE-001"
+/>
 
       <FairnessPanel
         candidateId="CANDIDATE-001"

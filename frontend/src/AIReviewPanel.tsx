@@ -15,6 +15,7 @@ import {
   RefreshCw,
   ShieldAlert,
   UserRound,
+  Video,
 } from "lucide-react";
 
 import {
@@ -31,11 +32,92 @@ import {
 
 import "./ai-review.css";
 
-
 interface AIReviewPanelProps {
   candidateId: string;
 }
 
+type ProctoringRisk =
+  | "LOW"
+  | "MEDIUM"
+  | "HIGH";
+
+interface ProctoringEvent {
+  id: string;
+  time: string;
+  type: string;
+  severity: ProctoringRisk;
+  message: string;
+}
+
+const PROCTORING_STORAGE_PREFIX =
+  "examshield_proctoring_events_";
+
+function getProctoringStorageKey(
+  candidateId: string
+): string {
+  return (
+    PROCTORING_STORAGE_PREFIX +
+    candidateId
+  );
+}
+
+function loadProctoringEvents(
+  candidateId: string
+): ProctoringEvent[] {
+  try {
+    const raw =
+      localStorage.getItem(
+        getProctoringStorageKey(
+          candidateId
+        )
+      );
+
+    if (!raw) {
+      return [];
+    }
+
+    const parsed =
+      JSON.parse(raw);
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed as ProctoringEvent[];
+  } catch {
+    return [];
+  }
+}
+
+function getLatestRisk(
+  events: ProctoringEvent[]
+): ProctoringRisk {
+  const riskEvent =
+    events.find(
+      (event) =>
+        event.type ===
+        "PROCTORING_RISK"
+    );
+
+  return (
+    riskEvent?.severity ??
+    "LOW"
+  );
+}
+
+function getRiskText(
+  risk: ProctoringRisk
+): string {
+  if (risk === "HIGH") {
+    return "Human review recommended";
+  }
+
+  if (risk === "MEDIUM") {
+    return "Attention signal observed";
+  }
+
+  return "No elevated proctoring signal";
+}
 
 function AIReviewPanel({
   candidateId,
@@ -49,30 +131,56 @@ function AIReviewPanel({
     useState(true);
 
   const [error, setError] =
-    useState<string | null>(null);
+    useState<string | null>(
+      null
+    );
+
+  const [
+    proctoringEvents,
+    setProctoringEvents,
+  ] = useState<ProctoringEvent[]>(
+    () =>
+      loadProctoringEvents(
+        candidateId
+      )
+  );
 
   const loadReviewData =
-    useCallback(async () => {
-      try {
-        setError(null);
+    useCallback(
+      async () => {
+        try {
+          setError(null);
 
-        const result =
-          await getCandidateAnomalySummary(
-            candidateId
+          const result =
+            await getCandidateAnomalySummary(
+              candidateId
+            );
+
+          setData(result);
+        } catch (err) {
+          console.error(err);
+
+          setError(
+            "Unable to load AI review data."
           );
+        } finally {
+          setLoading(false);
+        }
+      },
+      [candidateId]
+    );
 
-        setData(result);
-      } catch (err) {
-        console.error(err);
-
-        setError(
-          "Unable to load AI review data."
+  const refreshProctoring =
+    useCallback(
+      () => {
+        setProctoringEvents(
+          loadProctoringEvents(
+            candidateId
+          )
         );
-      } finally {
-        setLoading(false);
-      }
-    }, [candidateId]);
-
+      },
+      [candidateId]
+    );
 
   useEffect(() => {
     loadReviewData();
@@ -84,9 +192,51 @@ function AIReviewPanel({
       );
 
     return () =>
-      clearInterval(interval);
+      clearInterval(
+        interval
+      );
   }, [loadReviewData]);
 
+  useEffect(() => {
+    refreshProctoring();
+
+    const interval =
+      setInterval(
+        refreshProctoring,
+        2000
+      );
+
+    const handleStorage =
+      (event: StorageEvent) => {
+        if (
+          event.key ===
+          getProctoringStorageKey(
+            candidateId
+          )
+        ) {
+          refreshProctoring();
+        }
+      };
+
+    window.addEventListener(
+      "storage",
+      handleStorage
+    );
+
+    return () => {
+      clearInterval(
+        interval
+      );
+
+      window.removeEventListener(
+        "storage",
+        handleStorage
+      );
+    };
+  }, [
+    candidateId,
+    refreshProctoring,
+  ]);
 
   const distributionData =
     useMemo(() => {
@@ -103,6 +253,10 @@ function AIReviewPanel({
       );
     }, [data]);
 
+  const proctoringRisk =
+    getLatestRisk(
+      proctoringEvents
+    );
 
   if (loading) {
     return (
@@ -121,12 +275,13 @@ function AIReviewPanel({
     );
   }
 
-
   if (error) {
     return (
       <section className="ai-panel">
         <div className="ai-error">
-          <AlertTriangle size={20} />
+          <AlertTriangle
+            size={20}
+          />
 
           <span>
             {error}
@@ -134,15 +289,56 @@ function AIReviewPanel({
 
           <button
             className="ai-refresh-button"
-            onClick={loadReviewData}
+            onClick={
+              loadReviewData
+            }
           >
             Retry
+          </button>
+        </div>
+
+        <div
+          style={{
+            marginTop:
+              12,
+            padding:
+              12,
+            borderRadius:
+              10,
+            background:
+              "#f8fafc",
+            border:
+              "1px solid #e2e8f0",
+          }}
+        >
+          <strong
+            style={{
+              display:
+                "block",
+              fontSize:
+                12,
+              color:
+                "#334155",
+              marginBottom:
+                8,
+            }}
+          >
+            Camera Proctoring Evidence
+          </strong>
+
+          <button
+            className="ai-refresh-button"
+            onClick={
+              refreshProctoring
+            }
+          >
+            <Video size={15} />
+            Refresh Proctoring
           </button>
         </div>
       </section>
     );
   }
-
 
   if (!data) {
     return (
@@ -153,7 +349,6 @@ function AIReviewPanel({
       </section>
     );
   }
-
 
   return (
     <section className="ai-panel">
@@ -175,9 +370,10 @@ function AIReviewPanel({
           </p>
         </div>
 
-
         <div className="ai-candidate-chip">
-          <UserRound size={15} />
+          <UserRound
+            size={15}
+          />
 
           <span>
             {data.candidate_id}
@@ -186,12 +382,13 @@ function AIReviewPanel({
 
       </div>
 
-
       <div className="ai-metrics">
 
         <div className="ai-metric">
           <div className="ai-metric-icon">
-            <BrainCircuit size={20} />
+            <BrainCircuit
+              size={20}
+            />
           </div>
 
           <span>
@@ -203,10 +400,11 @@ function AIReviewPanel({
           </strong>
         </div>
 
-
         <div className="ai-metric">
           <div className="ai-metric-icon">
-            <Clock3 size={20} />
+            <Clock3
+              size={20}
+            />
           </div>
 
           <span>
@@ -218,10 +416,11 @@ function AIReviewPanel({
           </strong>
         </div>
 
-
         <div className="ai-metric">
           <div className="ai-metric-icon ai-danger">
-            <ShieldAlert size={20} />
+            <ShieldAlert
+              size={20}
+            />
           </div>
 
           <span>
@@ -233,10 +432,11 @@ function AIReviewPanel({
           </strong>
         </div>
 
-
         <div className="ai-metric">
           <div className="ai-metric-icon ai-review-icon">
-            <Eye size={20} />
+            <Eye
+              size={20}
+            />
           </div>
 
           <span>
@@ -250,37 +450,40 @@ function AIReviewPanel({
 
       </div>
 
-
       <div className="ai-content-grid">
 
         <div className="ai-summary-card">
 
           <div className="ai-section-title">
-            <BrainCircuit size={18} />
+            <BrainCircuit
+              size={18}
+            />
 
             <span>
               Risk Distribution
             </span>
           </div>
 
-
           <div className="ai-distribution">
 
-            {distributionData.length === 0 && (
+            {distributionData.length ===
+              0 && (
               <div className="ai-empty-small">
                 No behaviour events analysed yet.
               </div>
             )}
 
-
             {distributionData.map(
               ([level, count]) => (
                 <div
                   className="ai-distribution-row"
-                  key={level}
+                  key={
+                    level
+                  }
                 >
 
                   <div className="ai-distribution-label">
+
                     <span
                       className={`ai-risk-dot ${getRiskClass(
                         level
@@ -288,10 +491,12 @@ function AIReviewPanel({
                     />
 
                     <span>
-                      {getRiskLabel(level)}
+                      {getRiskLabel(
+                        level
+                      )}
                     </span>
-                  </div>
 
+                  </div>
 
                   <strong>
                     {count}
@@ -305,21 +510,22 @@ function AIReviewPanel({
 
         </div>
 
-
         <div className="ai-review-summary">
 
           <div className="ai-section-title">
-            <Flag size={18} />
+            <Flag
+              size={18}
+            />
 
             <span>
               Human Review Queue
             </span>
           </div>
 
-
           <div
             className={`ai-review-banner ${
-              data.summary.review_required_events >
+              data.summary
+                .review_required_events >
               0
                 ? "has-review"
                 : "no-review"
@@ -335,6 +541,7 @@ function AIReviewPanel({
                 />
 
                 <div>
+
                   <strong>
                     {
                       data.summary
@@ -349,6 +556,7 @@ function AIReviewPanel({
                     context before taking any
                     action.
                   </p>
+
                 </div>
               </>
             ) : (
@@ -358,6 +566,7 @@ function AIReviewPanel({
                 />
 
                 <div>
+
                   <strong>
                     No events currently require
                     review
@@ -367,15 +576,17 @@ function AIReviewPanel({
                     No review-level signal is
                     currently recorded.
                   </p>
+
                 </div>
               </>
             )}
 
           </div>
 
-
           <div className="ai-policy-note">
-            <ShieldAlert size={15} />
+            <ShieldAlert
+              size={15}
+            />
 
             <span>
               AI signals are decision-support
@@ -388,13 +599,353 @@ function AIReviewPanel({
 
       </div>
 
+      <div
+        style={{
+          marginTop:
+            18,
+          padding:
+            16,
+          borderRadius:
+            14,
+          border:
+            "1px solid #dbe3ec",
+          background:
+            "#ffffff",
+        }}
+      >
+
+        <div
+          style={{
+            display:
+              "flex",
+            alignItems:
+              "center",
+            justifyContent:
+              "space-between",
+            gap: 12,
+            flexWrap:
+              "wrap",
+            marginBottom:
+              12,
+          }}
+        >
+
+          <div>
+
+            <div className="ai-section-title">
+              <Video
+                size={18}
+              />
+
+              <span>
+                AI Camera Proctoring Review
+              </span>
+            </div>
+
+            <p
+              style={{
+                margin:
+                  "5px 0 0",
+                fontSize:
+                  11,
+                color:
+                  "#64748b",
+              }}
+            >
+              Last observed browser-side vision
+              signals for this candidate.
+            </p>
+
+          </div>
+
+          <button
+            className="ai-refresh-button"
+            onClick={
+              refreshProctoring
+            }
+          >
+            <RefreshCw
+              size={15}
+            />
+
+            Refresh
+          </button>
+
+        </div>
+
+        <div
+          style={{
+            display:
+              "grid",
+            gridTemplateColumns:
+              "repeat(3, minmax(0, 1fr))",
+            gap: 10,
+          }}
+        >
+
+          <div
+            style={{
+              padding:
+                12,
+              borderRadius:
+                10,
+              background:
+                "#f8fafc",
+              border:
+                "1px solid #e2e8f0",
+            }}
+          >
+            <div
+              style={{
+                fontSize:
+                  10,
+                color:
+                  "#64748b",
+              }}
+            >
+              Latest Risk
+            </div>
+
+            <strong
+              style={{
+                display:
+                  "block",
+                marginTop:
+                  4,
+                fontSize:
+                  20,
+                color:
+                  proctoringRisk ===
+                  "HIGH"
+                    ? "#b91c1c"
+                    : proctoringRisk ===
+                        "MEDIUM"
+                      ? "#a16207"
+                      : "#047857",
+              }}
+            >
+              {proctoringRisk}
+            </strong>
+          </div>
+
+          <div
+            style={{
+              padding:
+                12,
+              borderRadius:
+                10,
+              background:
+                "#f8fafc",
+              border:
+                "1px solid #e2e8f0",
+            }}
+          >
+            <div
+              style={{
+                fontSize:
+                  10,
+                color:
+                  "#64748b",
+              }}
+            >
+              Signals Recorded
+            </div>
+
+            <strong
+              style={{
+                display:
+                  "block",
+                marginTop:
+                  4,
+                fontSize:
+                  20,
+                color:
+                  "#0f172a",
+              }}
+            >
+              {
+                proctoringEvents.length
+              }
+            </strong>
+          </div>
+
+          <div
+            style={{
+              padding:
+                12,
+              borderRadius:
+                10,
+              background:
+                "#f8fafc",
+              border:
+                "1px solid #e2e8f0",
+            }}
+          >
+            <div
+              style={{
+                fontSize:
+                  10,
+                color:
+                  "#64748b",
+              }}
+            >
+              Review Status
+            </div>
+
+            <strong
+              style={{
+                display:
+                  "block",
+                marginTop:
+                  4,
+                fontSize:
+                  13,
+                color:
+                  proctoringRisk ===
+                  "HIGH"
+                    ? "#b91c1c"
+                    : proctoringRisk ===
+                        "MEDIUM"
+                      ? "#a16207"
+                      : "#047857",
+              }}
+            >
+              {
+                getRiskText(
+                  proctoringRisk
+                )
+              }
+            </strong>
+          </div>
+
+        </div>
+
+        <div
+          style={{
+            marginTop:
+              12,
+            display:
+              "grid",
+            gap: 7,
+          }}
+        >
+
+          {proctoringEvents
+            .slice(0, 6)
+            .map(
+              (event) => (
+                <div
+                  key={
+                    event.id
+                  }
+                  style={{
+                    display:
+                      "grid",
+                    gridTemplateColumns:
+                      "70px 145px 1fr",
+                    gap: 8,
+                    alignItems:
+                      "center",
+                    padding:
+                      "7px 0",
+                    borderBottom:
+                      "1px solid #e2e8f0",
+                    fontSize:
+                      11,
+                  }}
+                >
+
+                  <span
+                    style={{
+                      color:
+                        "#64748b",
+                    }}
+                  >
+                    {event.time}
+                  </span>
+
+                  <strong
+                    style={{
+                      color:
+                        event.severity ===
+                        "HIGH"
+                          ? "#b91c1c"
+                          : event.severity ===
+                              "MEDIUM"
+                            ? "#a16207"
+                            : "#047857",
+                    }}
+                  >
+                    {event.type}
+                  </strong>
+
+                  <span
+                    style={{
+                      color:
+                        "#475569",
+                    }}
+                  >
+                    {event.message}
+                  </span>
+
+                </div>
+              )
+            )
+          }
+
+          {proctoringEvents.length ===
+            0 && (
+            <div
+              style={{
+                padding:
+                  10,
+                borderRadius:
+                  8,
+                background:
+                  "#f8fafc",
+                color:
+                  "#64748b",
+                fontSize:
+                  11,
+              }}
+            >
+              No camera proctoring evidence has
+              been recorded for this candidate yet.
+            </div>
+          )}
+
+        </div>
+
+        <div
+          style={{
+            marginTop:
+              10,
+            fontSize:
+              10,
+            lineHeight:
+              1.5,
+            color:
+              "#64748b",
+          }}
+        >
+          Camera footage is not stored or uploaded
+          by this MVP. The dashboard displays
+          locally persisted computer-vision signals
+          for human review.
+        </div>
+
+      </div>
 
       <div className="ai-events-card">
 
         <div className="ai-events-header">
+
           <div>
+
             <div className="ai-section-title">
-              <Flag size={18} />
+              <Flag
+                size={18}
+              />
 
               <span>
                 Recent Behaviour Events
@@ -404,17 +955,23 @@ function AIReviewPanel({
             <p>
               Latest analysed candidate activity
             </p>
+
           </div>
 
           <button
             className="ai-refresh-button"
-            onClick={loadReviewData}
+            onClick={
+              loadReviewData
+            }
           >
-            <RefreshCw size={15} />
+            <RefreshCw
+              size={15}
+            />
+
             Refresh
           </button>
-        </div>
 
+        </div>
 
         <div className="ai-event-list">
 
@@ -424,21 +981,25 @@ function AIReviewPanel({
             ) => (
               <div
                 className="ai-event-row"
-                key={event.event_id}
+                key={
+                  event.event_id
+                }
               >
 
                 <div className="ai-event-main">
 
                   <div className="ai-event-title">
+
                     <strong>
                       {event.event_id}
                     </strong>
 
                     <span>
-                      Question {event.question_id}
+                      Question{" "}
+                      {event.question_id}
                     </span>
-                  </div>
 
+                  </div>
 
                   <div className="ai-event-flags">
 
@@ -446,7 +1007,9 @@ function AIReviewPanel({
                       (flag) => (
                         <span
                           className="ai-flag"
-                          key={flag}
+                          key={
+                            flag
+                          }
                         >
                           {flag}
                         </span>
@@ -454,7 +1017,6 @@ function AIReviewPanel({
                     )}
 
                   </div>
-
 
                   <div className="ai-event-details">
                     Answer time:
@@ -476,7 +1038,6 @@ function AIReviewPanel({
                   </div>
 
                 </div>
-
 
                 <div className="ai-event-risk">
 
@@ -506,7 +1067,6 @@ function AIReviewPanel({
             )
           )}
 
-
           {data.recent_events.length ===
             0 && (
             <div className="ai-empty-small">
@@ -518,9 +1078,11 @@ function AIReviewPanel({
 
       </div>
 
-
       <div className="ai-footer-note">
-        <ShieldAlert size={15} />
+
+        <ShieldAlert
+          size={15}
+        />
 
         <span>
           Policy: behaviour risk signals should
@@ -528,11 +1090,11 @@ function AIReviewPanel({
           context and reviewed by authorized
           personnel.
         </span>
+
       </div>
 
     </section>
   );
 }
-
 
 export default AIReviewPanel;
