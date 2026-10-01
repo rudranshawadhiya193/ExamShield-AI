@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import axios from "axios";
+import api from "./api";
 
 import App from "./App";
 import LoginPage from "./LoginPage";
@@ -446,8 +446,8 @@ function CandidatePortal({
 
     try {
       const response =
-        await axios.get(
-          `/backend/exam/responses/${candidateId}`,
+        await api.get(
+          `/exam/responses/${candidateId}`,
           {
             headers: {
               Authorization:
@@ -481,8 +481,8 @@ function CandidatePortal({
     }
 
     try {
-      await axios.post(
-        "/backend/exam/responses/sync",
+      await api.post(
+        "/exam/responses/sync",
         response,
         {
           headers: {
@@ -522,8 +522,8 @@ function CandidatePortal({
     }
 
     try {
-      const response = await axios.post<IncidentResponse>(
-        "/backend/candidate-disruptions/network",
+      const response = await api.post<IncidentResponse>(
+        "/candidate-disruptions/network",
         {
           exam_id: examId,
         },
@@ -569,8 +569,8 @@ function CandidatePortal({
     }
 
     try {
-      await axios.patch(
-        `/backend/candidate-disruptions/network/${incidentId}/resolve`,
+      await api.patch(
+        `/candidate-disruptions/network/${incidentId}/resolve`,
         null,
         {
           headers: {
@@ -999,8 +999,8 @@ export default function AuthGate() {
 
       try {
         const response =
-          await axios.get(
-            "/backend/auth/me",
+          await api.get(
+            "/auth/me",
             {
               headers: {
                 Authorization:
