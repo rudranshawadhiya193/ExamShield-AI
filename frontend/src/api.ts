@@ -553,3 +553,5 @@ export async function getTrustReport(
 
   return response.data;
 }
+
+export default api;
