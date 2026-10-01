@@ -465,9 +465,12 @@ export default function ProctoringPanel({
 
         await video.play();
 
+        const baseUrl =
+          import.meta.env.BASE_URL;
+
         const vision =
           await FilesetResolver.forVisionTasks(
-            "/wasm"
+            `${baseUrl}wasm`
           );
 
         const landmarker =
@@ -476,7 +479,7 @@ export default function ProctoringPanel({
             {
               baseOptions: {
                 modelAssetPath:
-                  "/models/face_landmarker.task",
+                  `${import.meta.env.BASE_URL}models/face_landmarker.task`,
               },
               runningMode:
                 "VIDEO",
