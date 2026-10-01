@@ -28,6 +28,46 @@ type RiskLevel =
   | "MEDIUM"
   | "HIGH";
 
+function loadLocalProctoringEvents(
+  candidateId: string
+): ProctoringEvent[] {
+  try {
+    const raw =
+      localStorage.getItem(
+        `examshield_proctoring_events_${candidateId}`
+      );
+
+    if (!raw) {
+      return [];
+    }
+
+    const parsed =
+      JSON.parse(raw) as Array<{
+        id: string;
+        time: string;
+        type: string;
+        severity: RiskLevel;
+        message: string;
+      }>;
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.map((event) => ({
+      id: event.id,
+      candidate_id: candidateId,
+      exam_id: "EXAM-DEMO-2026",
+      type: event.type,
+      severity: event.severity,
+      message: event.message,
+      time: event.time,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 function getLatestRisk(
   events: ProctoringEvent[]
 ): RiskLevel {
@@ -86,6 +126,9 @@ export default function ProctoringEvidencePanel({
   const [lastRefresh, setLastRefresh] =
     useState<string>("");
 
+  const [usingLocalFallback, setUsingLocalFallback] =
+    useState(false);
+
   const refresh = useCallback(
     async () => {
       try {
@@ -100,14 +143,30 @@ export default function ProctoringEvidencePanel({
           response.events ?? []
         );
 
+        setUsingLocalFallback(false);
+
         setLastRefresh(
           new Date().toLocaleTimeString()
         );
       } catch (requestError) {
         console.error(requestError);
 
-        setError(
-          "Unable to load server-side camera evidence."
+        /*
+         * Same-origin tabs share localStorage. This lets
+         * the admin review the candidate's computer-vision
+         * signals even while the hosted backend is down.
+         */
+        const localEvents =
+          loadLocalProctoringEvents(
+            candidateId
+          );
+
+        setEvents(localEvents);
+        setUsingLocalFallback(true);
+        setError(null);
+
+        setLastRefresh(
+          new Date().toLocaleTimeString()
         );
       } finally {
         setLoading(false);
@@ -274,6 +333,28 @@ export default function ProctoringEvidencePanel({
           Refresh
         </button>
       </div>
+
+      {usingLocalFallback && (
+        <div
+          style={{
+            marginBottom: 12,
+            padding: 12,
+            borderRadius: 10,
+            background: "#fffbeb",
+            border: "1px solid #fde68a",
+            color: "#92400e",
+            fontSize: 12,
+            lineHeight: 1.5,
+          }}
+        >
+          <strong>LOCAL BROWSER FALLBACK:</strong>{" "}
+          Backend is unreachable, so camera signals
+          are being read from the candidate's
+          same-origin browser storage. Open Admin
+          and Candidate in separate tabs of the same
+          browser for live demo evidence.
+        </div>
+      )}
 
       {error && (
         <div
