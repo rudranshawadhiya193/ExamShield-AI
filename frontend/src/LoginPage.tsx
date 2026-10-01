@@ -54,6 +54,8 @@ export default function LoginPage({
     try {
       setLoading(true);
 
+      await api.post("/auth/seed-demo-users");
+
       const loginResponse =
         await api.post(
           "/auth/login",
