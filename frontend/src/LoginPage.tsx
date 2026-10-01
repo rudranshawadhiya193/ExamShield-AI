@@ -3,44 +3,53 @@ import type { FormEvent } from "react";
 import api from "./api";
 
 import type { AuthUser } from "./auth";
-import { saveSession } from "./auth";
+import {
+  clearSession,
+  saveSession,
+} from "./auth";
 
 import "./login.css";
-
 
 interface LoginPageProps {
   onLogin: (user: AuthUser) => void;
 }
 
+type LoginRole =
+  | "ADMIN"
+  | "CANDIDATE";
+
+const DEMO_ACCOUNTS: Record<
+  LoginRole,
+  {
+    username: string;
+    password: string;
+  }
+> = {
+  ADMIN: {
+    username: "admin",
+    password: "Admin@123",
+  },
+  CANDIDATE: {
+    username: "candidate",
+    password: "Candidate@123",
+  },
+};
 
 export default function LoginPage({
-  onLogin
+  onLogin,
 }: LoginPageProps) {
-
-  const requestedRole =
-    new URLSearchParams(
-      window.location.search
-    ).get("role");
-
-  const initialUsername =
-    requestedRole === "admin"
-      ? "admin"
-      : requestedRole === "candidate"
-        ? "candidate"
-        : "";
-
-  const initialPassword =
-    requestedRole === "admin"
-      ? "Admin@123"
-      : requestedRole === "candidate"
-        ? "Candidate@123"
-        : "";
+  const [selectedRole, setSelectedRole] =
+    useState<LoginRole>("ADMIN");
 
   const [username, setUsername] =
-    useState(initialUsername);
+    useState(
+      DEMO_ACCOUNTS.ADMIN.username
+    );
 
   const [password, setPassword] =
-    useState(initialPassword);
+    useState(
+      DEMO_ACCOUNTS.ADMIN.password
+    );
 
   const [loading, setLoading] =
     useState(false);
@@ -48,24 +57,35 @@ export default function LoginPage({
   const [error, setError] =
     useState("");
 
+  function selectRole(
+    role: LoginRole
+  ): void {
+    setSelectedRole(role);
+    setUsername(
+      DEMO_ACCOUNTS[role].username
+    );
+    setPassword(
+      DEMO_ACCOUNTS[role].password
+    );
+    setError("");
+  }
 
   async function handleSubmit(
     event: FormEvent
-  ) {
+  ): Promise<void> {
     event.preventDefault();
-
     setError("");
 
     if (!username.trim()) {
       setError(
-        "Please enter your username."
+        "Please enter the username."
       );
       return;
     }
 
     if (!password) {
       setError(
-        "Please enter your password."
+        "Please enter the password."
       );
       return;
     }
@@ -73,14 +93,24 @@ export default function LoginPage({
     try {
       setLoading(true);
 
-      await api.post("/auth/seed-demo-users");
+      /*
+       * Remove any previous role/session before
+       * authenticating. This prevents a stale admin
+       * session from opening when candidate is chosen.
+       */
+      clearSession();
+
+      await api.post(
+        "/auth/seed-demo-users"
+      );
 
       const loginResponse =
         await api.post(
           "/auth/login",
           {
-            username: username.trim(),
-            password
+            username:
+              username.trim(),
+            password,
           }
         );
 
@@ -89,7 +119,7 @@ export default function LoginPage({
 
       if (!accessToken) {
         throw new Error(
-          "Authentication token was not returned."
+          "Authentication token was not returned by the backend."
         );
       }
 
@@ -99,8 +129,8 @@ export default function LoginPage({
           {
             headers: {
               Authorization:
-                `Bearer ${accessToken}`
-            }
+                `Bearer ${accessToken}`,
+            },
           }
         );
 
@@ -112,7 +142,13 @@ export default function LoginPage({
         user.role !== "CANDIDATE"
       ) {
         throw new Error(
-          "Unsupported user role."
+          "The backend returned an unsupported account role."
+        );
+      }
+
+      if (user.role !== selectedRole) {
+        throw new Error(
+          `This username belongs to the ${user.role} account. Select that role and sign in again.`
         );
       }
 
@@ -122,51 +158,34 @@ export default function LoginPage({
       );
 
       onLogin(user);
-
     } catch (requestError) {
+      const errorObject =
+        requestError as {
+          response?: {
+            data?: {
+              detail?: string;
+            };
+          };
+          message?: string;
+        };
 
-      if (requestError instanceof Error) {
-        setError(requestError.message || "Login failed. Please check the backend server.");
-
-      } else {
-
-        setError(
-          requestError instanceof Error
-            ? requestError.message
-            : "Login failed."
-        );
-      }
-
+      setError(
+        errorObject.response?.data?.detail ||
+        errorObject.message ||
+        "Login failed. Please verify the account and backend connection."
+      );
     } finally {
       setLoading(false);
     }
   }
 
-
-  function fillAdminCredentials() {
-    setUsername("admin");
-    setPassword("Admin@123");
-    setError("");
-  }
-
-
-  function fillCandidateCredentials() {
-    setUsername("candidate");
-    setPassword("Candidate@123");
-    setError("");
-  }
-
-
   return (
     <div className="login-page">
-
       <div className="login-background-glow glow-one" />
       <div className="login-background-glow glow-two" />
 
       <div className="login-card">
-
         <div className="login-brand">
-
           <div className="login-logo">
             ES
           </div>
@@ -177,33 +196,88 @@ export default function LoginPage({
             </div>
 
             <div className="login-brand-subtitle">
-              Resilient & Trustworthy
-              Online Assessment
+              Resilient & Trustworthy Online Assessment
             </div>
           </div>
-
         </div>
 
-
         <div className="login-heading">
-          {requestedRole === "admin"
-            ? "Administrator Control Center"
-            : requestedRole === "candidate"
-              ? "Candidate Examination Portal"
-              : "Secure Examination Portal"}
+          Secure Examination Portal
         </div>
 
         <div className="login-description">
-          Sign in to access the
-          ExamShield AI ecosystem.
+          Choose the account type below. Both
+          administrator and candidate access use
+          this same login screen.
         </div>
 
+        <div className="role-selector">
+          <button
+            type="button"
+            className={
+              "role-card " +
+              (
+                selectedRole === "ADMIN"
+                  ? "selected"
+                  : ""
+              )
+            }
+            onClick={() =>
+              selectRole("ADMIN")
+            }
+            disabled={loading}
+          >
+            <span className="role-card-title">
+              Administrator
+            </span>
+
+            <span className="role-card-copy">
+              Operations, AI monitoring,
+              incidents, audit and trust
+              reporting.
+            </span>
+          </button>
+
+          <button
+            type="button"
+            className={
+              "role-card " +
+              (
+                selectedRole === "CANDIDATE"
+                  ? "selected"
+                  : ""
+              )
+            }
+            onClick={() =>
+              selectRole("CANDIDATE")
+            }
+            disabled={loading}
+          >
+            <span className="role-card-title">
+              Candidate
+            </span>
+
+            <span className="role-card-copy">
+              Secure exam, camera
+              proctoring, offline buffer
+              and response synchronization.
+            </span>
+          </button>
+        </div>
+
+        <div className="selected-role-banner">
+          Signing in as{" "}
+          <strong>
+            {selectedRole === "ADMIN"
+              ? "ADMINISTRATOR"
+              : "CANDIDATE"}
+          </strong>
+        </div>
 
         <form
           className="login-form"
           onSubmit={handleSubmit}
         >
-
           <label htmlFor="username">
             Username
           </label>
@@ -221,7 +295,6 @@ export default function LoginPage({
             autoComplete="username"
             disabled={loading}
           />
-
 
           <label htmlFor="password">
             Password
@@ -241,13 +314,11 @@ export default function LoginPage({
             disabled={loading}
           />
 
-
           {error && (
             <div className="login-error">
               {error}
             </div>
           )}
-
 
           <button
             type="submit"
@@ -256,64 +327,33 @@ export default function LoginPage({
           >
             {loading
               ? "Authenticating..."
-              : "Sign In"}
+              : `Sign In as ${
+                  selectedRole ===
+                  "ADMIN"
+                    ? "Administrator"
+                    : "Candidate"
+                }`}
           </button>
-
         </form>
 
-
         <div className="demo-section">
-
           <div className="demo-title">
-            Hackathon Demo Accounts
+            Demo credentials
           </div>
 
-
-          <button
-            type="button"
-            className="demo-account"
-            onClick={
-              fillAdminCredentials
-            }
-            disabled={loading}
-          >
-            <span>
-              ADMIN
-            </span>
-
-            <small>
-              admin / Admin@123
-            </small>
-          </button>
-
-
-          <button
-            type="button"
-            className="demo-account"
-            onClick={
-              fillCandidateCredentials
-            }
-            disabled={loading}
-          >
-            <span>
-              CANDIDATE
-            </span>
-
-            <small>
-              candidate / Candidate@123
-            </small>
-          </button>
-
+          <div className="demo-note">
+            The role buttons above automatically
+            fill the correct demo account. You can
+            still edit the username and password.
+          </div>
         </div>
-
 
         <div className="login-footer">
-          Prevention → Detection →
-          Response → Recovery → Trust
+          One portal • One login • Role-based access
+          • Prevention → Detection → Response →
+          Recovery → Trust
         </div>
-
       </div>
-
     </div>
   );
 }
