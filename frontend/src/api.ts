@@ -4,10 +4,21 @@ import axios from "axios";
 const TOKEN_KEY =
   "examshield_access_token";
 
+const DEPLOYED_BACKEND_URL =
+  "https://examshield-ai-7fvx.onrender.com";
+
+const apiBaseUrl =
+  import.meta.env.VITE_API_BASE_URL ||
+  (
+    typeof window !== "undefined" &&
+    window.location.hostname.endsWith("github.io")
+      ? DEPLOYED_BACKEND_URL
+      : "/backend"
+  );
+
 
 const api = axios.create({
-  baseURL:
-  import.meta.env.VITE_API_BASE_URL || "/backend",
+  baseURL: apiBaseUrl,
   headers: {
     "Content-Type": "application/json",
   },
