@@ -316,8 +316,31 @@ export interface PredictionHistoryResponse {
 
 
 /* =======================================================
-   POST-EXAM TRUST REPORT
+   AI PROCTORING EVIDENCE
    ======================================================= */
+
+export interface ProctoringEvent {
+  id: string;
+  candidate_id: string;
+  exam_id: string;
+  type: string;
+  severity: "LOW" | "MEDIUM" | "HIGH";
+  message: string;
+  time: string | null;
+}
+
+export interface ProctoringEvidenceResponse {
+  status: string;
+  candidate_id: string;
+  total: number;
+  events: ProctoringEvent[];
+  timestamp: string;
+}
+
+
+/* =======================================================
+   POST-EXAM TRUST REPORT
+   =======================================================
 
 export interface TrustReportResponse {
   status: string;
@@ -566,3 +589,35 @@ export async function getTrustReport(
 }
 
 export default api;
+
+
+
+export async function recordProctoringEvent(
+  event: {
+    event_id: string;
+    candidate_id: string;
+    exam_id: string;
+    event_type: string;
+    severity: "LOW" | "MEDIUM" | "HIGH";
+    message: string;
+  }
+): Promise<ProctoringEvent> {
+  const response = await api.post<{
+    status: string;
+    event: ProctoringEvent;
+  }>("/proctoring/events", event);
+
+  return response.data.event;
+}
+
+
+export async function getProctoringEvidence(
+  candidateId: string
+): Promise<ProctoringEvidenceResponse> {
+  const response =
+    await api.get<ProctoringEvidenceResponse>(
+      `/proctoring/events/${candidateId}`
+    );
+
+  return response.data;
+}
