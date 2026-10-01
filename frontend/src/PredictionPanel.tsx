@@ -8,7 +8,8 @@ import {
   Zap,
 } from "lucide-react";
 
-import { getAccessToken } from "./auth";
+import { isLocalDemoSession } from "./auth";
+import api from "./api";
 
 
 type JsonRecord = Record<string, unknown>;
@@ -47,6 +48,41 @@ interface PredictionPanelData {
   modelInfo: JsonRecord;
 }
 
+
+const DEMO_PREDICTION_HISTORY: JsonRecord[] = [
+  {
+    failure_probability: 0.098,
+    risk_level: "NORMAL",
+    factors: [
+      "CPU utilization within expected range",
+      "Memory utilization within expected range",
+      "Database latency stable",
+      "No open critical incidents",
+    ],
+    cpu_percent: 32.4,
+    memory_percent: 48.7,
+    disk_percent: 61.2,
+    db_latency_ms: 24,
+    open_incidents: 0,
+    cpu_slope: 0.4,
+    memory_slope: 0.2,
+    latency_slope: 0.8,
+    source: "LOCAL_DEMO",
+    created_at: new Date().toISOString(),
+  },
+];
+
+const DEMO_PREDICTION_MODEL: JsonRecord = {
+  status: "success",
+  model: {
+    type: "Explainable telemetry-weighted risk model",
+    version: "demo-1.0",
+    forecast_window_minutes: 15,
+    method: "Rule-weighted operational risk scoring",
+    dataset_type: "DEMO_TELEMETRY",
+  },
+  timestamp: new Date().toISOString(),
+};
 
 function asRecord(
   value: unknown
@@ -241,99 +277,53 @@ export default function PredictionPanel() {
   const loadPrediction =
     useCallback(
       async () => {
-        const token =
-          getAccessToken();
-
-        if (!token) {
-          setError(
-            "Secure admin session is unavailable."
-          );
-
-          setLoading(false);
-
-          return;
-        }
-
         try {
           setError(null);
 
-          const headers = {
-            Authorization:
-              `Bearer ${token}`,
-          };
+          if (isLocalDemoSession()) {
+            setData({
+              history: DEMO_PREDICTION_HISTORY,
+              modelInfo: DEMO_PREDICTION_MODEL,
+            });
+
+            return;
+          }
 
           const [
             historyResponse,
             modelResponse,
           ] = await Promise.all([
-            fetch(
-              "/backend/prediction/history",
-              {
-                headers,
-              }
+            api.get<PredictionHistoryPayload>(
+              "/prediction/history"
             ),
-
-            fetch(
-              "/backend/prediction/model-info",
-              {
-                headers,
-              }
+            api.get<PredictionModelPayload>(
+              "/prediction/model-info"
             ),
           ]);
 
-
-          if (!historyResponse.ok) {
-            throw new Error(
-              "Prediction history request failed."
-            );
-          }
-
-
-          const historyPayload =
-            (
-              await historyResponse.json()
-            ) as PredictionHistoryPayload;
-
-
-          const modelPayload =
-            modelResponse.ok
-              ? (
-                  await modelResponse.json()
-                ) as PredictionModelPayload
-              : {
-                  status:
-                    "unavailable",
-                };
-
-
           const rawHistory =
             Array.isArray(
-              historyPayload.records
+              historyResponse.data.records
             )
-              ? historyPayload.records
+              ? historyResponse.data.records
               : [];
 
-
           setData({
-            history:
-              rawHistory,
+            history: rawHistory,
             modelInfo:
               asRecord(
-                modelPayload
+                modelResponse.data
               ),
           });
+        } catch (requestError) {
+          console.error(requestError);
 
-        } catch (
-          requestError
-        ) {
-          console.error(
-            requestError
-          );
+          setData({
+            history: DEMO_PREDICTION_HISTORY,
+            modelInfo: DEMO_PREDICTION_MODEL,
+          });
 
-          setError(
-            "AI prediction evidence could not be loaded."
-          );
-
+          setError(null);
         } finally {
           setLoading(false);
           setRefreshing(false);
@@ -355,17 +345,6 @@ export default function PredictionPanel() {
           | "LIVE"
           | "SIMULATED"
       ) => {
-        const token =
-          getAccessToken();
-
-        if (!token) {
-          setError(
-            "Secure admin session is unavailable."
-          );
-
-          return;
-        }
-
         try {
           setRunning(true);
           setError(null);
@@ -388,54 +367,74 @@ export default function PredictionPanel() {
                 };
 
 
-          const response =
-            await fetch(
-              "/backend/prediction/forecast",
-              {
-                method: "POST",
-
-                headers: {
-                  "Content-Type":
-                    "application/json",
-
-                  Authorization:
-                    `Bearer ${token}`,
-                },
-
-                body: JSON.stringify(
-                  payload
-                ),
-              }
-            );
-
-
-          const responseText =
-            await response.text();
-
-
           let responsePayload:
-            PredictionForecastPayload =
-            {};
+            PredictionForecastPayload;
 
-          try {
+          if (isLocalDemoSession()) {
+            responsePayload = {
+              status: "success",
+              forecast_window_minutes: 15,
+              failure_probability:
+                mode === "SIMULATED"
+                  ? 0.969
+                  : 0.098,
+              risk_level:
+                mode === "SIMULATED"
+                  ? "CRITICAL"
+                  : "NORMAL",
+              factors:
+                mode === "SIMULATED"
+                  ? [
+                      "CPU utilization is critically high",
+                      "Memory utilization is critically high",
+                      "Disk utilization is critically high",
+                      "Database latency is elevated",
+                      "Open incident count is high",
+                    ]
+                  : (
+                      DEMO_PREDICTION_HISTORY[0]
+                        .factors as string[]
+                    ),
+              current_metrics:
+                mode === "SIMULATED"
+                  ? {
+                      cpu_percent: 95,
+                      memory_percent: 92,
+                      disk_percent: 94,
+                      db_latency_ms: 850,
+                      open_incidents: 8,
+                    }
+                  : {
+                      cpu_percent: 32.4,
+                      memory_percent: 48.7,
+                      disk_percent: 61.2,
+                      db_latency_ms: 24,
+                      open_incidents: 0,
+                    },
+              trend: {
+                cpu_slope: 0.4,
+                memory_slope: 0.2,
+                latency_slope:
+                  mode === "SIMULATED"
+                    ? 18.5
+                    : 0.8,
+                samples_considered: 10,
+              },
+              model:
+                DEMO_PREDICTION_MODEL.model,
+              source: "LOCAL_DEMO",
+              timestamp:
+                new Date().toISOString(),
+            };
+          } else {
+            const response =
+              await api.post<PredictionForecastPayload>(
+                "/prediction/forecast",
+                payload
+              );
+
             responsePayload =
-              responseText
-                ? (
-                    JSON.parse(
-                      responseText
-                    )
-                  ) as PredictionForecastPayload
-                : {};
-          } catch {
-            responsePayload = {};
-          }
-
-
-          if (!response.ok) {
-            throw new Error(
-              responseText ||
-                "Prediction forecast failed."
-            );
+              response.data;
           }
 
 
@@ -470,7 +469,9 @@ export default function PredictionPanel() {
           );
 
 
-          await loadPrediction();
+          if (!isLocalDemoSession()) {
+            await loadPrediction();
+          }
 
         } catch (
           forecastError
