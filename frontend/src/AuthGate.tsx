@@ -10,6 +10,7 @@ import {
   clearSession,
   getAccessToken,
   getStoredUser,
+  isLocalDemoSession,
 } from "./auth";
 
 import "./login.css";
@@ -993,6 +994,17 @@ export default function AuthGate() {
         getAccessToken();
 
       if (!token) {
+        setCheckingSession(false);
+        return;
+      }
+
+      /*
+       * A local demo session is intentionally accepted
+       * without a backend round-trip. This keeps the
+       * public hackathon demo usable while Render is
+       * sleeping or temporarily unreachable.
+       */
+      if (isLocalDemoSession()) {
         setCheckingSession(false);
         return;
       }
