@@ -6,7 +6,8 @@ const TOKEN_KEY =
 
 
 const api = axios.create({
-  baseURL: "/backend",
+  baseURL:
+  import.meta.env.VITE_API_BASE_URL || "/backend",
   headers: {
     "Content-Type": "application/json",
   },

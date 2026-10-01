@@ -6,6 +6,9 @@ from app.api.routes.anomaly import (
 from app.api.routes.audit import (
     router as audit_router,
 )
+
+
+from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes.auth import (
     router as auth_router,
 )
@@ -72,6 +75,14 @@ Base.metadata.create_all(
 app = FastAPI(
     title="ExamShield AI",
     version="1.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
