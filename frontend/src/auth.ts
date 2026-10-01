@@ -6,48 +6,80 @@ export interface AuthUser {
   is_active: boolean;
 }
 
-const TOKEN_KEY = "examshield_access_token";
-const USER_KEY = "examshield_user";
+const TOKEN_KEY =
+  "examshield_access_token";
+
+const USER_KEY =
+  "examshield_user";
+
+/*
+ * Authentication is intentionally kept in
+ * sessionStorage so two browser tabs can hold
+ * independent admin/candidate demo sessions.
+ *
+ * Clear the previous localStorage auth keys once
+ * to remove stale sessions created by older builds.
+ */
+if (typeof window !== "undefined") {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+}
 
 export function saveSession(
   accessToken: string,
   user: AuthUser
 ): void {
-  localStorage.setItem(
+  sessionStorage.setItem(
     TOKEN_KEY,
     accessToken
   );
 
-  localStorage.setItem(
+  sessionStorage.setItem(
     USER_KEY,
     JSON.stringify(user)
   );
+
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
 }
 
 export function getAccessToken(): string | null {
-  return localStorage.getItem(
+  return sessionStorage.getItem(
     TOKEN_KEY
   );
 }
 
 export function getStoredUser(): AuthUser | null {
-  const rawUser = localStorage.getItem(
-    USER_KEY
-  );
+  const rawUser =
+    sessionStorage.getItem(
+      USER_KEY
+    );
 
   if (!rawUser) {
     return null;
   }
 
   try {
-    return JSON.parse(rawUser) as AuthUser;
+    return JSON.parse(
+      rawUser
+    ) as AuthUser;
   } catch {
-    localStorage.removeItem(USER_KEY);
+    sessionStorage.removeItem(
+      USER_KEY
+    );
     return null;
   }
 }
 
 export function clearSession(): void {
+  sessionStorage.removeItem(
+    TOKEN_KEY
+  );
+
+  sessionStorage.removeItem(
+    USER_KEY
+  );
+
   localStorage.removeItem(
     TOKEN_KEY
   );
