@@ -47,6 +47,52 @@ import AuditPanel from "./AuditPanel";
 import TrustReportPanel from "./TrustReportPanel";
 import PredictionPanel from "./PredictionPanel";
 
+const DEMO_HEALTH: HealthResponse = {
+  status: "healthy",
+  service: "ExamShield AI Demo Mode",
+  timestamp: new Date().toISOString(),
+  system: {
+    cpu_percent: 32.4,
+    memory_percent: 48.7,
+    disk_percent: 61.2,
+  },
+  incidents: [],
+};
+
+const DEMO_SUMMARY: IncidentSummaryResponse = {
+  status: "success",
+  summary: {
+    total_incidents: 1,
+    open_incidents: 0,
+    resolved_incidents: 1,
+    critical_incidents: 0,
+    high_incidents: 0,
+    warning_incidents: 1,
+    low_incidents: 0,
+    open_critical_incidents: 0,
+  },
+  severity_breakdown: {
+    WARNING: 1,
+  },
+  type_breakdown: {
+    DEMO_NETWORK_RECOVERY: 1,
+  },
+  timestamp: new Date().toISOString(),
+};
+
+const DEMO_INCIDENTS: Incident[] = [
+  {
+    id: 1,
+    type: "DEMO_NETWORK_RECOVERY",
+    severity: "WARNING",
+    message:
+      "Demo environment is using resilient local monitoring while the backend reconnects.",
+    status: "RESOLVED",
+    created_at: new Date().toISOString(),
+    resolved_at: new Date().toISOString(),
+  },
+];
+
 function HealthBar({
   icon,
   label,
@@ -100,6 +146,9 @@ function OperationsDashboard() {
   const [lastUpdated, setLastUpdated] =
     useState<string | null>(null);
 
+  const [backendAvailable, setBackendAvailable] =
+    useState(true);
+
   const loadDashboard = useCallback(
     async () => {
       try {
@@ -118,14 +167,20 @@ function OperationsDashboard() {
         setHealth(healthData);
         setIncidents(incidentsData.incidents);
         setSummary(summaryData);
+        setBackendAvailable(true);
         setLastUpdated(
           new Date().toLocaleTimeString()
         );
       } catch (requestError) {
         console.error(requestError);
-        setError(
-          "Unable to connect to the ExamShield backend."
+        setBackendAvailable(false);
+        setHealth(DEMO_HEALTH);
+        setIncidents(DEMO_INCIDENTS);
+        setSummary(DEMO_SUMMARY);
+        setLastUpdated(
+          new Date().toLocaleTimeString()
         );
+        setError(null);
       } finally {
         setLoading(false);
       }
@@ -227,6 +282,27 @@ function OperationsDashboard() {
         <div className="error-banner">
           <XCircle size={20} />
           <span>{error}</span>
+        </div>
+      )}
+
+      {!backendAvailable && (
+        <div
+          style={{
+            marginBottom: 14,
+            padding: "10px 12px",
+            borderRadius: 10,
+            border:
+              "1px solid rgba(251,191,36,0.28)",
+            background:
+              "rgba(251,191,36,0.08)",
+            color: "#f6d27d",
+            fontSize: 12,
+          }}
+        >
+          DEMO RESILIENCE MODE — hosted backend is
+          currently unreachable. Local authentication,
+          exam flow and camera evidence remain
+          available for the prototype.
         </div>
       )}
 
