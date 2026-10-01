@@ -30,6 +30,9 @@ from app.api.routes.incident import (
 from app.api.routes.prediction import (
     router as prediction_router,
 )
+from app.api.routes.proctoring import (
+    router as proctoring_router,
+)
 from app.api.routes.report import (
     router as report_router,
 )
@@ -61,6 +64,9 @@ from app.models.health_metric import (
 )
 from app.models.incident import (
     Incident,
+)
+from app.models.proctoring_event import (
+    ProctoringEvent,
 )
 from app.models.user import (
     User,
@@ -192,6 +198,10 @@ app.include_router(
     dependencies=[
         Depends(require_admin)
     ],
+)
+
+app.include_router(
+    proctoring_router,
 )
 
 
