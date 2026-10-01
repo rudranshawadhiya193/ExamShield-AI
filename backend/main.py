@@ -80,10 +80,56 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def seed_demo_users():
+    db = SessionLocal()
+    try:
+        demo_users = [
+            {
+                "username": "admin",
+                "password": "Admin@123",
+                "role": "ADMIN",
+                "full_name": "ExamShield Administrator",
+            },
+            {
+                "username": "candidate",
+                "password": "Candidate@123",
+                "role": "CANDIDATE",
+                "full_name": "Demo Candidate",
+            },
+        ]
+
+        for item in demo_users:
+            existing = (
+                db.query(User)
+                .filter(User.username == item["username"])
+                .first()
+            )
+
+            if existing:
+                continue
+
+            db.add(
+                User(
+                    username=item["username"],
+                    password_hash=hash_password(item["password"]),
+                    role=item["role"],
+                    full_name=item["full_name"],
+                    is_active=1,
+                )
+            )
+
+        db.commit()
+    finally:
+        db.close()
+
+
+seed_demo_users()
 
 
 # ---------------------------------------------------------
