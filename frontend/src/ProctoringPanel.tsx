@@ -10,6 +10,8 @@ import {
   type FaceLandmarkerResult,
 } from "@mediapipe/tasks-vision";
 
+import { recordProctoringEvent } from "./api";
+
 interface ProctoringPanelProps {
   candidateId: string;
   examId: string;
@@ -85,7 +87,7 @@ function addStoredEvent(
   type: string,
   severity: RiskLevel,
   message: string
-): void {
+): EventItem {
   const existing =
     loadStoredEvents(
       candidateId
@@ -106,6 +108,8 @@ function addStoredEvent(
       50
     )
   );
+
+  return item;
 }
 
 function calculateHeadTurn(
@@ -278,14 +282,25 @@ export default function ProctoringPanel({
         lastEventTimeRef.current =
           now;
 
-        addStoredEvent(
+        const item = addStoredEvent(
           candidateId,
           type,
           severity,
           message
         );
+
+        void recordProctoringEvent({
+          event_id: item.id,
+          candidate_id: candidateId,
+          exam_id: examId,
+          event_type: type,
+          severity,
+          message,
+        }).catch(() => {
+          // Local evidence remains available if the API is temporarily unavailable.
+        });
       },
-      [candidateId]
+      [candidateId, examId]
     );
 
   const detectFrame =
