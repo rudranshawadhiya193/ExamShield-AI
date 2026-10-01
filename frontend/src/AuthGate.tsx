@@ -3,6 +3,7 @@ import axios from "axios";
 
 import App from "./App";
 import LoginPage from "./LoginPage";
+import ProctoringPanel from "./ProctoringPanel";
 
 import type { AuthUser } from "./auth";
 import {
@@ -503,7 +504,9 @@ function CandidatePortal({
     const token = getAccessToken();
 
     if (!token) {
-      setEventStatus("Secure session token unavailable; disruption event was not registered.");
+      setEventStatus(
+        "Secure session token unavailable; disruption event was not registered."
+      );
       return false;
     }
 
@@ -827,6 +830,12 @@ function CandidatePortal({
           </div>
 
         </div>
+
+
+        <ProctoringPanel
+          candidateId={candidateId}
+          examId={examId}
+        />
 
 
         {QUESTIONS.map(
