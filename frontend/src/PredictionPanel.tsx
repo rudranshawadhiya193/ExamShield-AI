@@ -421,7 +421,9 @@ export default function PredictionPanel() {
                 samples_considered: 10,
               },
               model:
-                DEMO_PREDICTION_MODEL.model,
+                asRecord(
+                  DEMO_PREDICTION_MODEL.model
+                ),
               source: "LOCAL_DEMO",
               timestamp:
                 new Date().toISOString(),
