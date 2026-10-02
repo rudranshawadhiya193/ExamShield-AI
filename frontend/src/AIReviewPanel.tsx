@@ -264,6 +264,25 @@ function AIReviewPanel({
               candidateId
             );
 
+          /*
+           * A fresh demo backend can legitimately have zero
+           * behaviour events. Keep the analysis card useful
+           * while making the fallback visible to the reviewer.
+           */
+          if (
+            result.summary.total_events === 0 &&
+            result.recent_events.length === 0
+          ) {
+            setData({
+              ...DEMO_BEHAVIOUR_DATA,
+              candidate_id:
+                result.candidate_id || "CANDIDATE-001",
+              timestamp:
+                result.timestamp,
+            });
+            return;
+          }
+
           setData(result);
         } catch (err) {
           console.error(err);
@@ -371,6 +390,14 @@ function AIReviewPanel({
     getLatestRisk(
       proctoringEvents
     );
+
+  const showingDemoBehaviour =
+    data?.recent_events.some(
+      (event) =>
+        event.event_id.startsWith(
+          "DEMO-BEHAVIOR-"
+        )
+    ) ?? false;
 
   if (loading) {
     return (
@@ -495,6 +522,27 @@ function AIReviewPanel({
         </div>
 
       </div>
+
+      {showingDemoBehaviour && (
+        <div
+          style={{
+            marginBottom: 14,
+            padding: "10px 12px",
+            borderRadius: 10,
+            border: "1px solid #bfdbfe",
+            background: "#eff6ff",
+            color: "#1e40af",
+            fontSize: 11,
+            lineHeight: 1.5,
+          }}
+        >
+          <strong>Demo behaviour baseline:</strong>{" "}
+          No live behaviour events are available yet,
+          so the dashboard is showing a documented
+          sample for the review workflow. Live backend
+          events replace this sample automatically.
+        </div>
+      )}
 
       <div className="ai-metrics">
 
