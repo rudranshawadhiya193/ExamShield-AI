@@ -19,6 +19,10 @@ import {
   type CandidateFairnessResponse,
 } from "./api";
 
+import {
+  isLocalDemoSession,
+} from "./auth";
+
 import "./trust-panels.css";
 
 
@@ -49,6 +53,48 @@ function formatDuration(
 }
 
 
+const DEMO_FAIRNESS_DATA: CandidateFairnessResponse = {
+  status: "success",
+  candidate_id: "CANDIDATE-001",
+  summary: {
+    total_disruptions: 1,
+    average_impact_score: 35,
+    maximum_impact_score: 35,
+    severe_disruptions: 0,
+    high_impact_disruptions: 0,
+    total_affected_questions: 1,
+    total_recovered_responses: 1,
+  },
+  recent_disruptions: [
+    {
+      disruption_id: "DEMO-DISRUPTION-001",
+      incident_id: 1,
+      disruption_type: "NETWORK_FAILURE",
+      duration_ms: 65000,
+      affected_questions: 1,
+      pending_responses: 1,
+      recovered_responses: 1,
+      impact_score: 35,
+      impact_level: "MEDIUM",
+      recommendation:
+        "REVIEW_DISRUPTION_IMPACT",
+      evidence: [
+        "DISRUPTION_OVER_1_MINUTE",
+        "QUESTIONS_AFFECTED",
+        "PENDING_RESPONSE_EXISTS",
+        "ALL_PENDING_RESPONSES_RECOVERED",
+      ],
+      created_at:
+        "2026-10-02T06:45:00.000Z",
+    },
+  ],
+  policy_note:
+    "Fairness recommendations are decision-support only. Final exam actions must be determined by authorized examination personnel using exam rules and available evidence.",
+  timestamp:
+    "2026-10-02T06:45:00.000Z",
+};
+
+
 function FairnessPanel({
   candidateId,
 }: FairnessPanelProps) {
@@ -69,14 +115,31 @@ function FairnessPanel({
       try {
         setError(null);
 
+        if (isLocalDemoSession()) {
+          setData(DEMO_FAIRNESS_DATA);
+          return;
+        }
+
         const result =
           await getCandidateFairness(
             candidateId
           );
 
+        /*
+         * Live backend data takes precedence. The newly
+         * connected disruption-recovery flow creates a
+         * DisruptionEvent automatically when an incident
+         * is resolved.
+         */
         setData(result);
       } catch (err) {
         console.error(err);
+
+        if (isLocalDemoSession()) {
+          setData(DEMO_FAIRNESS_DATA);
+          setError(null);
+          return;
+        }
 
         setError(
           "Unable to load fairness analysis."
@@ -178,6 +241,31 @@ function FairnessPanel({
 
       </div>
 
+
+      {data.recent_disruptions.some(
+        (event) =>
+          event.disruption_id.startsWith(
+            "DEMO-DISRUPTION-"
+          )
+      ) && (
+        <div
+          style={{
+            marginBottom: 14,
+            padding: "10px 12px",
+            borderRadius: 10,
+            border: "1px solid #bfdbfe",
+            background: "#eff6ff",
+            color: "#1e40af",
+            fontSize: 11,
+            lineHeight: 1.5,
+          }}
+        >
+          <strong>Demo impact baseline:</strong>{" "}
+          Live disruption records will replace this
+          sample automatically after a real recovery
+          event is recorded.
+        </div>
+      )}
 
       <div className="trust-metrics">
 
