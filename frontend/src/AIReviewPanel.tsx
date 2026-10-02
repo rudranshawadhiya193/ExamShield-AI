@@ -25,6 +25,10 @@ import {
 } from "./api";
 
 import {
+  isLocalDemoSession,
+} from "./auth";
+
+import {
   getRiskClass,
   getRiskDescription,
   getRiskLabel,
@@ -48,6 +52,105 @@ interface ProctoringEvent {
   severity: ProctoringRisk;
   message: string;
 }
+
+const DEMO_BEHAVIOUR_DATA: CandidateAnomalyResponse = {
+  status: "success",
+  candidate_id: "CANDIDATE-001",
+  summary: {
+    total_events: 5,
+    average_risk_score: 27.4,
+    maximum_risk_score: 65,
+    review_required_events: 0,
+    high_risk_events: 1,
+    risk_level_distribution: {
+      NORMAL: 2,
+      LOW: 1,
+      MEDIUM: 1,
+      HIGH: 1,
+    },
+  },
+  recent_events: [
+    {
+      event_id: "DEMO-BEHAVIOR-Q5",
+      question_id: "Q5",
+      risk_score: 65,
+      risk_level: "HIGH",
+      flags: [
+        "HIGH_FOCUS_CHANGE_COUNT",
+        "FAST_RESPONSE",
+      ],
+      answer_time_ms: 4200,
+      answer_changes: 0,
+      focus_changes: 4,
+      offline_duration_ms: 0,
+      navigation_count: 2,
+      created_at: "2026-10-02T06:45:00.000Z",
+    },
+    {
+      event_id: "DEMO-BEHAVIOR-Q4",
+      question_id: "Q4",
+      risk_score: 45,
+      risk_level: "MEDIUM",
+      flags: [
+        "FOCUS_CHANGE_DETECTED",
+      ],
+      answer_time_ms: 7800,
+      answer_changes: 0,
+      focus_changes: 1,
+      offline_duration_ms: 0,
+      navigation_count: 1,
+      created_at: "2026-10-02T06:44:00.000Z",
+    },
+    {
+      event_id: "DEMO-BEHAVIOR-Q3",
+      question_id: "Q3",
+      risk_score: 25,
+      risk_level: "LOW",
+      flags: [
+        "VERY_FAST_RESPONSE",
+      ],
+      answer_time_ms: 2400,
+      answer_changes: 0,
+      focus_changes: 0,
+      offline_duration_ms: 0,
+      navigation_count: 0,
+      created_at: "2026-10-02T06:43:00.000Z",
+    },
+    {
+      event_id: "DEMO-BEHAVIOR-Q2",
+      question_id: "Q2",
+      risk_score: 0,
+      risk_level: "NORMAL",
+      flags: [
+        "NO_UNUSUAL_SIGNAL_DETECTED",
+      ],
+      answer_time_ms: 12400,
+      answer_changes: 0,
+      focus_changes: 0,
+      offline_duration_ms: 0,
+      navigation_count: 0,
+      created_at: "2026-10-02T06:42:00.000Z",
+    },
+    {
+      event_id: "DEMO-BEHAVIOR-Q1",
+      question_id: "Q1",
+      risk_score: 0,
+      risk_level: "NORMAL",
+      flags: [
+        "NO_UNUSUAL_SIGNAL_DETECTED",
+      ],
+      answer_time_ms: 18200,
+      answer_changes: 0,
+      focus_changes: 0,
+      offline_duration_ms: 0,
+      navigation_count: 0,
+      created_at: "2026-10-02T06:41:00.000Z",
+    },
+  ],
+  policy_note:
+    "Risk signals are intended for human review and should not be treated as an automatic cheating verdict.",
+  timestamp: "2026-10-02T06:45:00.000Z",
+};
 
 const PROCTORING_STORAGE_PREFIX =
   "examshield_proctoring_events_";
@@ -151,6 +254,11 @@ function AIReviewPanel({
         try {
           setError(null);
 
+          if (isLocalDemoSession()) {
+            setData(DEMO_BEHAVIOUR_DATA);
+            return;
+          }
+
           const result =
             await getCandidateAnomalySummary(
               candidateId
@@ -159,6 +267,12 @@ function AIReviewPanel({
           setData(result);
         } catch (err) {
           console.error(err);
+
+          if (isLocalDemoSession()) {
+            setData(DEMO_BEHAVIOUR_DATA);
+            setError(null);
+            return;
+          }
 
           setError(
             "Unable to load AI review data."
