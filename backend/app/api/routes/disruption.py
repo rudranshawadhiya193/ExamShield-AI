@@ -121,24 +121,6 @@ async def create_network_disruption(
                 else None
             ),
         },
-        "fairness": {
-            "disruption_id": fairness_event.disruption_id,
-            "impact_score": fairness_event.impact_score,
-            "impact_level": fairness_event.impact_level,
-            "affected_questions": (
-                fairness_event.affected_questions
-            ),
-            "pending_responses": (
-                fairness_event.pending_responses
-            ),
-            "recovered_responses": (
-                fairness_event.recovered_responses
-            ),
-            "recommendation": (
-                fairness_event.recommendation
-            ),
-            "evidence": evidence,
-        },
     }
 
 
@@ -367,5 +349,23 @@ async def resolve_network_disruption(
                 if incident.resolved_at
                 else None
             ),
+        },
+        "fairness": {
+            "disruption_id": fairness_event.disruption_id,
+            "impact_score": fairness_event.impact_score,
+            "impact_level": fairness_event.impact_level,
+            "affected_questions": (
+                fairness_event.affected_questions
+            ),
+            "pending_responses": (
+                fairness_event.pending_responses
+            ),
+            "recovered_responses": (
+                fairness_event.recovered_responses
+            ),
+            "recommendation": (
+                fairness_event.recommendation
+            ),
+            "evidence": evidence,
         },
     }
