@@ -6,11 +6,20 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import require_candidate
+from app.models.disruption_event import DisruptionEvent
 from app.models.incident import Incident
+from app.services.audit_service import create_audit_event
+from app.services.fairness_service import calculate_disruption_impact
 
 
 class NetworkDisruptionCreate(BaseModel):
     exam_id: str
+
+
+class NetworkDisruptionResolve(BaseModel):
+    affected_questions: int = 0
+    pending_responses: int = 0
+    recovered_responses: int = 0
 
 
 router = APIRouter(
@@ -110,12 +119,31 @@ async def create_network_disruption(
                 else None
             ),
         },
+        "fairness": {
+            "disruption_id": fairness_event.disruption_id,
+            "impact_score": fairness_event.impact_score,
+            "impact_level": fairness_event.impact_level,
+            "affected_questions": (
+                fairness_event.affected_questions
+            ),
+            "pending_responses": (
+                fairness_event.pending_responses
+            ),
+            "recovered_responses": (
+                fairness_event.recovered_responses
+            ),
+            "recommendation": (
+                fairness_event.recommendation
+            ),
+            "evidence": evidence,
+        },
     }
 
 
 @router.patch("/network/{incident_id}/resolve")
 async def resolve_network_disruption(
     incident_id: int,
+    resolve_data: NetworkDisruptionResolve | None = None,
     db: Session = Depends(get_db),
     _: object = Depends(require_candidate),
 ):
@@ -142,6 +170,14 @@ async def resolve_network_disruption(
         )
 
     if incident.status == "RESOLVED":
+        existing_event = (
+            db.query(DisruptionEvent)
+            .filter(
+                DisruptionEvent.incident_id == incident.id
+            )
+            .first()
+        )
+
         return {
             "status": "success",
             "message": (
@@ -165,6 +201,18 @@ async def resolve_network_disruption(
                     else None
                 ),
             },
+            "fairness": (
+                {
+                    "disruption_id": existing_event.disruption_id,
+                    "impact_score": existing_event.impact_score,
+                    "impact_level": existing_event.impact_level,
+                    "affected_questions": existing_event.affected_questions,
+                    "pending_responses": existing_event.pending_responses,
+                    "recovered_responses": existing_event.recovered_responses,
+                }
+                if existing_event
+                else None
+            ),
         }
 
     incident.status = "RESOLVED"
@@ -172,8 +220,128 @@ async def resolve_network_disruption(
         timezone.utc
     ).replace(tzinfo=None)
 
+    resolve_data = (
+        resolve_data
+        or NetworkDisruptionResolve()
+    )
+
+    duration_ms = 0
+    if incident.created_at:
+        duration_ms = max(
+            0,
+            int(
+                (
+                    incident.resolved_at
+                    - incident.created_at
+                ).total_seconds()
+                * 1000
+            )
+        )
+
+    duration_ms = min(
+        duration_ms,
+        86400000
+    )
+
+    disruption_id = (
+        f"DISRUPTION-INCIDENT-{incident.id}"
+    )
+
+    (
+        impact_score,
+        impact_level,
+        recommendation,
+        evidence,
+    ) = calculate_disruption_impact(
+        duration_ms=duration_ms,
+        affected_questions=max(
+            0,
+            resolve_data.affected_questions
+        ),
+        pending_responses=max(
+            0,
+            resolve_data.pending_responses
+        ),
+        recovered_responses=max(
+            0,
+            resolve_data.recovered_responses
+        ),
+    )
+
+    fairness_event = (
+        db.query(DisruptionEvent)
+        .filter(
+            DisruptionEvent.disruption_id
+            == disruption_id
+        )
+        .first()
+    )
+
+    if not fairness_event:
+        fairness_event = DisruptionEvent(
+            disruption_id=disruption_id,
+            exam_id=(
+                incident.message
+                .split(" examination ", 1)[1]
+                .rstrip(".")
+                if " examination " in incident.message
+                else "EXAM-DEMO-001"
+            ),
+            candidate_id=DEMO_CANDIDATE_ID,
+            incident_id=incident.id,
+            disruption_type="NETWORK_FAILURE",
+            duration_ms=duration_ms,
+            affected_questions=max(
+                0,
+                resolve_data.affected_questions
+            ),
+            pending_responses=max(
+                0,
+                resolve_data.pending_responses
+            ),
+            recovered_responses=max(
+                0,
+                resolve_data.recovered_responses
+            ),
+            impact_score=impact_score,
+            impact_level=impact_level,
+            recommendation=recommendation,
+            evidence=json.dumps(evidence),
+        )
+
+        db.add(fairness_event)
+
+        create_audit_event(
+            db=db,
+            event_type="FAIRNESS_IMPACT_ANALYSIS",
+            actor="FAIRNESS_ENGINE",
+            entity_type="DISRUPTION_EVENT",
+            entity_id=disruption_id,
+            payload={
+                "incident_id": incident.id,
+                "candidate_id": DEMO_CANDIDATE_ID,
+                "duration_ms": duration_ms,
+                "affected_questions": max(
+                    0,
+                    resolve_data.affected_questions
+                ),
+                "pending_responses": max(
+                    0,
+                    resolve_data.pending_responses
+                ),
+                "recovered_responses": max(
+                    0,
+                    resolve_data.recovered_responses
+                ),
+                "impact_score": impact_score,
+                "impact_level": impact_level,
+                "recommendation": recommendation,
+            },
+        )
+
     db.commit()
     db.refresh(incident)
+    db.refresh(fairness_event)
 
     return {
         "status": "success",
