@@ -90,29 +90,71 @@ export default function LoginPage({
       return;
     }
 
+    const expectedAccount =
+      username.trim() ===
+        DEMO_ACCOUNTS[selectedRole].username &&
+      password ===
+        DEMO_ACCOUNTS[selectedRole].password;
+
+    async function loginOnce() {
+      return api.post(
+        "/auth/login",
+        {
+          username:
+            username.trim(),
+          password,
+        },
+        {
+          timeout: 12000,
+        }
+      );
+    }
+
+    async function waitBeforeRetry(): Promise<void> {
+      await new Promise<void>((resolve) =>
+        window.setTimeout(resolve, 450)
+      );
+    }
+
     try {
       setLoading(true);
-
-      /*
-       * Remove any previous role/session before
-       * authenticating. This prevents a stale admin
-       * session from opening when candidate is chosen.
-       */
       clearSession();
 
-      await api.post(
-        "/auth/seed-demo-users"
-      );
+      let loginResponse;
 
-      const loginResponse =
-        await api.post(
-          "/auth/login",
-          {
-            username:
-              username.trim(),
-            password,
+      try {
+        loginResponse = await loginOnce();
+      } catch (firstError) {
+        const first = firstError as {
+          response?: {
+            status?: number;
+          };
+        };
+
+        if (
+          first.response?.status === 401 &&
+          expectedAccount
+        ) {
+          try {
+            await api.post(
+              "/auth/seed-demo-users",
+              {},
+              {
+                timeout: 6000,
+              }
+            );
+          } catch {
+            // Retry login even if the seed request is unavailable.
           }
-        );
+
+          loginResponse = await loginOnce();
+        } else if (!first.response) {
+          await waitBeforeRetry();
+          loginResponse = await loginOnce();
+        } else {
+          throw firstError;
+        }
+      }
 
       const accessToken =
         loginResponse.data?.access_token;
@@ -123,19 +165,52 @@ export default function LoginPage({
         );
       }
 
-      const meResponse =
-        await api.get(
-          "/auth/me",
-          {
-            headers: {
-              Authorization:
-                `Bearer ${accessToken}`,
-            },
-          }
-        );
+      let user: AuthUser;
 
-      const user =
-        meResponse.data as AuthUser;
+      try {
+        const meResponse =
+          await api.get(
+            "/auth/me",
+            {
+              headers: {
+                Authorization:
+                  `Bearer ${accessToken}`,
+              },
+              timeout: 8000,
+            }
+          );
+
+        user =
+          meResponse.data as AuthUser;
+      } catch (firstMeError) {
+        const firstMe =
+          firstMeError as {
+            response?: {
+              status?: number;
+            };
+          };
+
+        if (!firstMe.response) {
+          await waitBeforeRetry();
+
+          const retryMe =
+            await api.get(
+              "/auth/me",
+              {
+                headers: {
+                  Authorization:
+                    `Bearer ${accessToken}`,
+                },
+                timeout: 8000,
+              }
+            );
+
+          user =
+            retryMe.data as AuthUser;
+        } else {
+          throw firstMeError;
+        }
+      }
 
       if (
         user.role !== "ADMIN" &&
@@ -167,25 +242,13 @@ export default function LoginPage({
             };
           };
           message?: string;
+          code?: string;
         };
 
-      /*
-       * Demo fallback:
-       * Render can sleep or be temporarily unreachable.
-       * The two documented demo accounts can still open
-       * the correct role-controlled UI so the hackathon
-       * prototype remains usable.
-       *
-       * Real accounts never use this fallback.
-       */
       const networkUnavailable =
-        !errorObject.response;
-
-      const expectedAccount =
-        username.trim() ===
-          DEMO_ACCOUNTS[selectedRole].username &&
-        password ===
-          DEMO_ACCOUNTS[selectedRole].password;
+        !errorObject.response ||
+        errorObject.code ===
+          "ECONNABORTED";
 
       if (
         networkUnavailable &&
