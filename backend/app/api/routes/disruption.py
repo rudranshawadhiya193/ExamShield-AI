@@ -19,6 +19,7 @@ class NetworkDisruptionCreate(BaseModel):
 
 
 class NetworkDisruptionResolve(BaseModel):
+    exam_id: str = "EXAM-DEMO-001"
     affected_questions: int = 0
     pending_responses: int = 0
     recovered_responses: int = 0
@@ -265,11 +266,8 @@ async def resolve_network_disruption(
         fairness_event = DisruptionEvent(
             disruption_id=disruption_id,
             exam_id=(
-                incident.message
-                .split(" examination ", 1)[1]
-                .rstrip(".")
-                if " examination " in incident.message
-                else "EXAM-DEMO-001"
+                resolve_data.exam_id
+                or "EXAM-DEMO-001"
             ),
             candidate_id=DEMO_CANDIDATE_ID,
             incident_id=incident.id,
@@ -333,6 +331,24 @@ async def resolve_network_disruption(
             "Candidate network disruption "
             "resolved successfully"
         ),
+        "fairness": {
+            "disruption_id": fairness_event.disruption_id,
+            "impact_score": fairness_event.impact_score,
+            "impact_level": fairness_event.impact_level,
+            "affected_questions": (
+                fairness_event.affected_questions
+            ),
+            "pending_responses": (
+                fairness_event.pending_responses
+            ),
+            "recovered_responses": (
+                fairness_event.recovered_responses
+            ),
+            "recommendation": (
+                fairness_event.recommendation
+            ),
+            "evidence": evidence,
+        },
         "incident": {
             "id": incident.id,
             "type": incident.type,
