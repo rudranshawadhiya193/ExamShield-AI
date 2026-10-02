@@ -555,10 +555,12 @@ function CandidatePortal({
 
   async function resolveNetworkIncident(
     metrics: {
+      exam_id: string;
       affected_questions: number;
       pending_responses: number;
       recovered_responses: number;
     } = {
+      exam_id: examId,
       affected_questions: 0,
       pending_responses: 0,
       recovered_responses: 0,
@@ -651,6 +653,7 @@ function CandidatePortal({
 
     if (remaining.length === 0) {
       await resolveNetworkIncident({
+        exam_id: examId,
         affected_questions: affectedQuestionCount,
         pending_responses: pendingResponseCount,
         recovered_responses:
