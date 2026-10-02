@@ -553,7 +553,17 @@ function CandidatePortal({
   }
 
 
-  async function resolveNetworkIncident(): Promise<void> {
+  async function resolveNetworkIncident(
+    metrics: {
+      affected_questions: number;
+      pending_responses: number;
+      recovered_responses: number;
+    } = {
+      affected_questions: 0,
+      pending_responses: 0,
+      recovered_responses: 0,
+    }
+  ): Promise<void> {
     const token = getAccessToken();
     const incidentId =
       activeIncidentId ?? loadActiveIncidentId(candidateId);
@@ -572,7 +582,7 @@ function CandidatePortal({
     try {
       await api.patch(
         `/candidate-disruptions/network/${incidentId}/resolve`,
-        null,
+        metrics,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -604,11 +614,30 @@ function CandidatePortal({
       return;
     }
 
+    /*
+     * Capture the batch before synchronization. These are
+     * the responses that were actually affected by the
+     * disruption and entered the recovery pipeline.
+     */
+    const disruptedResponses = [
+      ...pendingResponses,
+    ];
+
+    const affectedQuestionCount =
+      new Set(
+        disruptedResponses.map(
+          (response) => response.question_id
+        )
+      ).size;
+
+    const pendingResponseCount =
+      disruptedResponses.length;
+
     setSyncing(true);
 
     const remaining: PendingResponse[] = [];
 
-    for (const response of pendingResponses) {
+    for (const response of disruptedResponses) {
       const success = await syncResponse(response);
 
       if (!success) {
@@ -621,7 +650,13 @@ function CandidatePortal({
     await refreshSyncedCount();
 
     if (remaining.length === 0) {
-      await resolveNetworkIncident();
+      await resolveNetworkIncident({
+        affected_questions: affectedQuestionCount,
+        pending_responses: pendingResponseCount,
+        recovered_responses:
+          pendingResponseCount -
+          remaining.length,
+      });
     } else {
       setEventStatus(
         `${remaining.length} encrypted response${
